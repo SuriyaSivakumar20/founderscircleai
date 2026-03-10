@@ -90,7 +90,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
 
         <div className="mt-12 pt-8 border-t border-zinc-50 dark:border-zinc-800">
           <p className="text-[8px] uppercase tracking-[0.3em] text-zinc-400 font-bold text-center">
-            Demo Credentials: admin@founderscircle.ai / SecureAdmin123!
+            Demo Credentials: testing@test.com / password
           </p>
         </div>
       </div>

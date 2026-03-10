@@ -99,12 +99,12 @@ export const seedDatabase = async () => {
     }
 
     // 3. Create a Demo Admin User
-    const hashedPassword = await bcrypt.hash('SecureAdmin123!', 10);
+    const hashedPassword = await bcrypt.hash('password', 10);
     await prisma.user.upsert({
-      where: { email: 'admin@founderscircle.ai' },
+      where: { email: 'testing@test.com' },
       update: {},
       create: {
-        email: 'admin@founderscircle.ai',
+        email: 'testing@test.com',
         password: hashedPassword,
         name: 'FoundersCircle Admin',
         role: 'ADMIN',

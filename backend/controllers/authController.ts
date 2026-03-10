@@ -57,12 +57,12 @@ export const login = async (req: Request, res: Response) => {
     const { email, password } = loginSchema.parse(req.body);
 
     // Vercel Presentation Fallback: Hardcode the demo user so it ALWAYS works, even if DB fails to seed
-    if (email === 'admin@founderscircle.ai' && password === 'SecureAdmin123!') {
+    if (email === 'testing@test.com' && password === 'password') {
       const demoToken = jwt.sign({ id: 'demo-admin-id' }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({
         user: {
           id: 'demo-admin-id',
-          email: 'admin@founderscircle.ai',
+          email: 'testing@test.com',
           name: 'FoundersCircle Admin',
           role: 'ADMIN',
           industry: 'Technology',
