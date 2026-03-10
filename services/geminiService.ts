@@ -25,6 +25,32 @@ export interface EvaluationResult {
   admissionStatus: 'ADMITTED' | 'CONDITIONAL' | 'REJECTED';
 }
 
+// ── Helper to read SSE stream ──────────────────
+async function readSseStream(res: Response): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No readable stream available');
+  const decoder = new TextDecoder();
+  let fullText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunkStr = decoder.decode(value, { stream: true });
+    const lines = chunkStr.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.text) fullText += data.text;
+        } catch (e) {
+          // Ignore JSON parse errors for incomplete chunks
+        }
+      }
+    }
+  }
+  return fullText;
+}
+
 // ── Generate next question ────────────────────
 export async function generateNextQuestion(
   role: UserRole,
@@ -38,8 +64,17 @@ export async function generateNextQuestion(
     });
 
     if (!res.ok) throw new Error(`Server error: ${res.status}`);
-    const data = await res.json();
-    return data.question || getFallbackQuestion(role, previousInteraction.length + 1);
+
+    let text = '';
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('text/event-stream')) {
+      text = await readSseStream(res);
+    } else {
+      const data = await res.json();
+      text = data.question || '';
+    }
+
+    return text.trim() || getFallbackQuestion(role, previousInteraction.length + 1);
   } catch (e) {
     console.error('generateNextQuestion failed:', e);
     return getFallbackQuestion(role, previousInteraction.length + 1);
@@ -59,7 +94,16 @@ export async function evaluateInterview(
     });
 
     if (!res.ok) throw new Error(`Server error: ${res.status}`);
-    const data = await res.json();
+
+    let data: any = {};
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('text/event-stream')) {
+      const fullText = await readSseStream(res);
+      data = JSON.parse(fullText || '{}');
+    } else {
+      data = await res.json();
+    }
+
     if (!data.admissionStatus) {
       data.admissionStatus = data.score >= 70 ? 'ADMITTED' : data.score >= 45 ? 'CONDITIONAL' : 'REJECTED';
     }

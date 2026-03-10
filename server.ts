@@ -75,11 +75,26 @@ async function startServer() {
         ? `${ANALYST_PERSONA}\n\n${directive}\n\nThis is Question 1 of 5. Open with a sharp, provocative question that immediately signals high-caliber vetting. No generic openers. Return ONLY the question text.`
         : `${ANALYST_PERSONA}\n\n${directive}\n\nConversation so far:\n${conversationHistory}\n\nThis is Question ${questionNumber} of 5. Based specifically on the subject's LAST ANSWER: extract their industry/sector/domain, name a real competitor or benchmark, and ask ONE penetrating follow-up from a new angle not yet covered. Return ONLY the question text.`;
 
-      const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
-      res.json({ question: response.text?.trim() || "What is the core risk to your strategy and how do you mitigate it?" });
+      const responseStream = await ai.models.generateContentStream({ model: 'gemini-2.0-flash', contents: prompt });
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      for await (const chunk of responseStream) {
+        if (chunk.text) {
+          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        }
+      }
+      res.end();
     } catch (err: any) {
       console.error('AI question route error:', err.message);
-      res.status(500).json({ error: err.message, question: null });
+      // Fallback for stream error
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message, question: null });
+      } else {
+        res.end();
+      }
     }
   });
 
@@ -126,7 +141,7 @@ Verdict = one sentence of 10-15 words.
 
 Return JSON only.`;
 
-      const response = await ai.models.generateContent({
+      const responseStream = await ai.models.generateContentStream({
         model: 'gemini-2.0-flash',
         contents: prompt,
         config: {
@@ -159,14 +174,23 @@ Return JSON only.`;
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
-      if (!parsed.admissionStatus) {
-        parsed.admissionStatus = parsed.score >= 70 ? 'ADMITTED' : parsed.score >= 45 ? 'CONDITIONAL' : 'REJECTED';
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      for await (const chunk of responseStream) {
+        if (chunk.text) {
+          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        }
       }
-      res.json(parsed);
+      res.end();
     } catch (err: any) {
       console.error('AI evaluate route error:', err.message);
-      res.status(500).json({ error: err.message });
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message });
+      } else {
+        res.end();
+      }
     }
   });
 
