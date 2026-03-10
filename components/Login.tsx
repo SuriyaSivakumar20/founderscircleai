@@ -20,6 +20,27 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
     setIsLoading(true);
 
     try {
+      // ── Demo Bypass (100% client-side, zero backend needed) ──────────
+      if (email.trim().toLowerCase() === 'testing@test.com' && password === 'password') {
+        const demoUser = {
+          id: 'demo-admin-id',
+          email: 'testing@test.com',
+          name: 'FoundersCircle Admin',
+          role: 'ADMIN' as const,
+          industry: 'Technology',
+          description: 'Official administrator for the FoundersCircle platform.',
+          avatar: 'https://picsum.photos/seed/admin/200',
+          createdAt: new Date().toISOString(),
+        };
+        // Store a fake token so getMe() doesn't fail on refresh
+        localStorage.setItem('founders_circle_token', 'demo-token-bypass');
+        localStorage.setItem('founders_circle_demo_user', JSON.stringify(demoUser));
+        setIsLoading(false);
+        onLogin(demoUser);
+        return;
+      }
+      // ────────────────────────────────────────────────────────────────
+
       const data = await apiService.login({ email, password });
       onLogin(data.user);
     } catch (err: any) {
