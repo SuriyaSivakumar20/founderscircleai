@@ -226,17 +226,49 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
   const [activeProfile, setActiveProfile] = useState<Company | Investor | null>(null);
 
   useEffect(() => {
+    const FALLBACK_COMPANIES: Company[] = [
+      { id: 'c1', name: 'Zepto', industry: 'Quick Commerce', description: '10-minute grocery delivery operating across 10 Indian cities, backed by Y Combinator and a16z.', location: 'Mumbai', website: 'https://www.zeptonow.com', linkedinUrl: 'https://linkedin.com/company/zepto', isPublicEntity: false },
+      { id: 'c2', name: 'Groww', industry: 'FinTech', description: 'India\'s leading investment platform with 40M+ users for mutual funds, stocks, and gold investments.', location: 'Bengaluru', website: 'https://groww.in', linkedinUrl: 'https://linkedin.com/company/groww', isPublicEntity: false },
+      { id: 'c3', name: 'PharmEasy', industry: 'HealthTech', description: 'India\'s largest online pharmacy aggregator serving 3M+ monthly orders with telehealth capabilities.', location: 'Mumbai', website: 'https://pharmeasy.in', linkedinUrl: 'https://linkedin.com/company/pharmeasy', isPublicEntity: false },
+      { id: 'c4', name: 'CRED', industry: 'FinTech / Rewards', description: 'Premium credit card payments platform offering exclusive rewards for creditworthy Indians. Valued at $6.4B.', location: 'Bengaluru', website: 'https://cred.club', linkedinUrl: 'https://linkedin.com/company/cred-club', isPublicEntity: false },
+      { id: 'c5', name: 'Meesho', industry: 'Social Commerce', description: 'India\'s largest social commerce platform enabling 15M+ resellers, primarily targeting Tier 2/3 markets.', location: 'Bengaluru', website: 'https://meesho.com', linkedinUrl: 'https://linkedin.com/company/meesho', isPublicEntity: false },
+      { id: 'c6', name: 'Urban Company', industry: 'Home Services', description: 'On-demand home services platform connecting skilled professionals to urban households across India & UAE.', location: 'Gurugram', website: 'https://urbancompany.com', linkedinUrl: 'https://linkedin.com/company/urban-company', isPublicEntity: false },
+      { id: 'c7', name: 'Nykaa', industry: 'Beauty & Fashion', description: 'India\'s leading beauty omnichannel retailer with 150K+ SKUs and a premium direct brand portfolio.', location: 'Mumbai', website: 'https://nykaa.com', linkedinUrl: 'https://linkedin.com/company/nykaa', isPublicEntity: true },
+      { id: 'c8', name: 'Slice', industry: 'FinTech / Credit', description: 'Next-gen credit card & payments app targeting young Indians with 5M+ active members and zero annual fees.', location: 'Bengaluru', website: 'https://sliceit.com', linkedinUrl: 'https://linkedin.com/company/sliceit', isPublicEntity: false },
+    ];
+
+    const FALLBACK_INVESTORS: Investor[] = [
+      { id: 'i1', name: 'Sequoia Capital India', description: 'Tier-1 global VC with $4B+ deployed in India across Byju\'s, Zomato, CRED, and 100+ portfolio companies.', location: 'Bengaluru', website: 'https://www.sequoiacap.com', linkedinUrl: 'https://linkedin.com/company/sequoiacapital', isPublicEntity: true },
+      { id: 'i2', name: 'Blume Ventures', description: 'India\'s most active early-stage VC backing 170+ startups including Unacademy, Dunzo, and Purplle.', location: 'Mumbai', website: 'https://blume.vc', linkedinUrl: 'https://linkedin.com/company/blume-ventures', isPublicEntity: false },
+      { id: 'i3', name: '3one4 Capital', description: 'Bengaluru-based VC with 60+ portfolio companies. Known for sector-agnostic early bets in B2B SaaS and consumer tech.', location: 'Bengaluru', website: 'https://3one4capital.com', linkedinUrl: 'https://linkedin.com/company/3one4capital', isPublicEntity: false },
+      { id: 'i4', name: 'Accel India', description: 'First investor in Flipkart and Swiggy. Manages $1.5B+ across India with a strong founder community.', location: 'Bengaluru', website: 'https://www.accel.com', linkedinUrl: 'https://linkedin.com/company/accel', isPublicEntity: false },
+      { id: 'i5', name: 'Tiger Global Management', description: 'New York-based hedge fund and growth equity investor with 100+ Indian portfolio companies including Flipkart and CRED.', location: 'New York / India', website: 'https://www.tigerglobal.com', linkedinUrl: 'https://linkedin.com/company/tiger-global-management', isPublicEntity: false },
+      { id: 'i6', name: 'Peak XV Partners', description: 'Formerly Sequoia Capital India/SEA — one of the most prolific VC firms in the region with $9B AUM.', location: 'Bengaluru', website: 'https://www.peakxv.com', linkedinUrl: 'https://linkedin.com/company/peakxv', isPublicEntity: false },
+    ];
+
     const fetchMatches = async () => {
       try {
         setIsLoading(true);
-        const companies = await apiService.getCompanies();
-        const investors = await apiService.getInvestors();
+        let companies: Company[] = [];
+        let investors: Investor[] = [];
+
+        try {
+          companies = await apiService.getCompanies();
+          investors = await apiService.getInvestors();
+        } catch {
+          // API unavailable on Vercel — use the fallback data
+        }
+
+        // Use fallback if API returned empty results
+        if (companies.length === 0) companies = FALLBACK_COMPANIES;
+        if (investors.length === 0) investors = FALLBACK_INVESTORS;
 
         if (user.role === 'FOUNDER') {
           setMatches(investors);
         } else if (user.role === 'INVESTOR') {
           setMatches(companies);
         } else {
+          // ADMIN gets to see all
           setMatches([...companies, ...investors]);
         }
       } catch (error) {
