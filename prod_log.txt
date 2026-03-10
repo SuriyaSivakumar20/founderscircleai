@@ -1,0 +1,9 @@
+
+> founderscircle-ai@0.0.0 dev
+> tsx server.ts
+
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+Seeding database with real Indian public entities...
+Seeding complete.
+Server running on http://localhost:3000
+Error: ENOENT: no such file or directory, stat '/Users/suriyas/projects/dist/index.html'

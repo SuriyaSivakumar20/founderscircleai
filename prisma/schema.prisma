@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          String    // 'FOUNDER', 'INVESTOR', 'ADMIN'
+  industry      String?
+  description   String?
+  avatar        String?
+  website       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  posts         Post[]
+  likes         Like[]
+  comments      Comment[]
+  followers     Follow[]  @relation("Follower")
+  following     Follow[]  @relation("Following")
+}
+
+model Company {
+  id            String    @id @default(uuid())
+  name          String    @unique
+  industry      String
+  description   String
+  location      String    // e.g., 'Bengaluru', 'Chennai'
+  avatar        String?
+  website       String    // Official website for verification
+  linkedinUrl   String?   // LinkedIn for verification
+  isPublicEntity Boolean  @default(true)
+  createdAt     DateTime  @default(now())
+
+  posts         Post[]    @relation("CompanyReference")
+}
+
+model Investor {
+  id            String    @id @default(uuid())
+  name          String    @unique
+  description   String
+  location      String    // e.g., 'Bengaluru', 'Mumbai'
+  avatar        String?
+  website       String    // Official website for verification
+  linkedinUrl   String?   // LinkedIn for verification
+  isPublicEntity Boolean  @default(true)
+  createdAt     DateTime  @default(now())
+
+  posts         Post[]    @relation("InvestorReference")
+}
+
+model Post {
+  id            String    @id @default(uuid())
+  content       String
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  authorId      String
+  author        User      @relation(fields: [authorId], references: [id])
+
+  referencedCompanyId  String?
+  referencedCompany    Company? @relation("CompanyReference", fields: [referencedCompanyId], references: [id])
+
+  referencedInvestorId String?
+  referencedInvestor   Investor? @relation("InvestorReference", fields: [referencedInvestorId], references: [id])
+
+  likes         Like[]
+  comments      Comment[]
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+}
+
+model Follow {
+  id            String   @id @default(uuid())
+  followerId    String
+  followingId   String
+  follower      User     @relation("Follower", fields: [followerId], references: [id])
+  following     User     @relation("Following", fields: [followingId], references: [id])
+
+  @@unique([followerId, followingId])
+}

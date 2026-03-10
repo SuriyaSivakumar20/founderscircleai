@@ -1,0 +1,8 @@
+{
+  "name": "FoundersCircle AI",
+  "description": "An AI-gated platform connecting high-quality startups with specialized venture capitalists through rigorous AI interviewing and matching.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
