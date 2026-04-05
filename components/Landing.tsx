@@ -32,6 +32,29 @@ const Landing: React.FC<LandingProps> = ({ onSignup, onLogin, onDirectAccess }) 
             The Elite <span className="text-accent">Nexus</span>
           </h2>
 
+          <p className="mt-8 text-zinc-500 dark:text-zinc-500 font-serif italic">
+          Currently vetting Cohort IV
+        </p>
+
+        {/* Sample Dealflow */}
+        <div className="mt-24 w-full max-w-4xl opacity-50 hover:opacity-100 transition-opacity duration-1000 hidden md:block">
+          <span className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-8 block">Sample Deals</span>
+          <div className="flex gap-4 blur-[2px] pointer-events-none hover:blur-none transition-all duration-1000">
+            <div className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 p-6 text-left shadow-2xl">
+               <h4 className="font-serif italic text-2xl mb-2 text-ink dark:text-paper">ZephyrHealth AI</h4>
+               <p className="text-[10px] uppercase tracking-widest text-zinc-400 mb-4 font-bold">Raising Series A • HealthTech</p>
+               <p className="text-sm font-light text-zinc-500 mb-4 line-clamp-2">Voice-first AI diagnostic assistant designed for ASHA workers in low-connectivity rural environments...</p>
+               <span className="text-accent text-[10px] uppercase font-bold tracking-widest">₹18 Cr Target</span>
+            </div>
+            <div className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 p-6 text-left shadow-2xl">
+               <h4 className="font-serif italic text-2xl mb-2 text-ink dark:text-paper">Kiran Infra Systems</h4>
+               <p className="text-[10px] uppercase tracking-widest text-zinc-400 mb-4 font-bold">Raising Seed • ConstructionTech</p>
+               <p className="text-sm font-light text-zinc-500 mb-4 line-clamp-2">India's first AI-powered site supervision platform for large-scale infrastructure projects processing 2.4M items...</p>
+               <span className="text-accent text-[10px] uppercase font-bold tracking-widest">₹42 Cr Target</span>
+            </div>
+          </div>
+        </div>
+
           <p className="text-zinc-500 dark:text-zinc-400 text-xl md:text-2xl max-w-3xl mx-auto leading-relaxed mb-12 font-light italic">
             A private ecosystem where clarity of thought meets strategic capital. Admittance is granted only through rigorous AI synthesis.
           </p>

@@ -95,14 +95,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full border border-accent text-accent py-5 rounded-none font-bold transition-all hover:bg-accent hover:text-white uppercase tracking-[0.4em] text-[10px] shadow-xl shadow-accent/5 active:scale-95 disabled:opacity-50"
+              className="w-full bg-accent text-white py-5 rounded-none font-bold transition-all hover:opacity-90 uppercase tracking-[0.4em] text-[10px] shadow-xl shadow-accent/20 active:scale-95 disabled:opacity-50"
             >
               {isLoading ? 'Authorizing...' : 'Authorize Session'}
             </button>
             <button
               type="button"
               onClick={onBack}
-              className="w-full py-2 text-zinc-400 hover:text-ink dark:hover:text-paper transition-colors text-[9px] font-bold uppercase tracking-[0.3em] text-center"
+              className="w-full border border-zinc-200 dark:border-zinc-800 text-zinc-500 py-5 rounded-none font-bold transition-all hover:text-ink dark:hover:text-paper uppercase tracking-[0.4em] text-[10px]"
             >
               Return to Nexus
             </button>

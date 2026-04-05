@@ -39,7 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
 
   const tabs: { id: TabId; label: string; path: string; icon: React.ReactNode }[] = [
     {
-      id: 'feed', label: 'Feed', path: '/dashboard/feed',
+      id: 'feed', label: 'Deal Room', path: '/dashboard/feed',
       icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>,
     },
     {
@@ -105,19 +105,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 md:p-16 max-w-6xl mx-auto w-full dashboard-content">
-        <div className="mb-12 flex justify-between items-end">
+      <main className="flex-1 w-full dashboard-content relative overflow-x-hidden">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-40 bg-paper/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-100 dark:border-zinc-800/60 px-8 py-8 md:px-16 md:py-10 flex justify-between items-end transition-colors duration-500">
           <div>
             <span className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-2 block">Current Workspace</span>
-            <h2 className="text-5xl font-serif italic text-ink dark:text-paper capitalize">{activeTab}</h2>
+            <h2 className="text-5xl font-serif italic text-ink dark:text-paper capitalize transition-all">
+              {activeTab === 'feed' ? 'Deal Room' : activeTab}
+            </h2>
           </div>
           <div className="text-right hidden md:block">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-400 font-bold block">Authenticated As</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-400 font-bold block mb-1">Authenticated As</span>
             <span className="text-sm font-serif italic text-ink dark:text-paper">{user.name}</span>
           </div>
         </div>
 
-        <div className="h-[1px] w-full bg-zinc-100 dark:bg-zinc-800 mb-12" />
+        {/* scrollable routable content area */}
+        <div className="p-8 md:p-16 max-w-6xl mx-auto">
 
         <Routes>
           <Route path="feed" element={<Feed user={user} />} />
@@ -126,6 +130,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
           <Route path="profile" element={<ProfileView user={user} />} />
           <Route path="*" element={<Navigate to="feed" replace />} />
         </Routes>
+        </div>
       </main>
 
       {/* Mobile Navigation */}

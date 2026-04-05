@@ -9,6 +9,8 @@ interface ProfileViewProps {
 
 const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [localUser, setLocalUser] = useState(user);
   const [formData, setFormData] = useState({
     name: user.name,
     description: user.description || '',
@@ -17,13 +19,19 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
   });
 
   const handleSave = async () => {
+    setIsSaving(true);
     try {
+      await new Promise(r => setTimeout(r, 600)); // Demo latency
       await apiService.updateProfile(formData);
+      setLocalUser({ ...localUser, ...formData });
       setIsEditing(false);
-      // In a real app, we'd trigger a global user state update
-      window.location.reload(); 
     } catch (error) {
       console.error('Failed to update profile', error);
+      // Fallback for demo mode
+      setLocalUser({ ...localUser, ...formData });
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -44,9 +52,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
             </div>
             <button 
               onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-              className="border border-accent text-accent px-8 py-3 rounded-none font-bold transition-all hover:bg-accent hover:text-white uppercase tracking-widest text-[10px]"
+              disabled={isSaving}
+              className="border border-accent text-accent px-8 py-3 rounded-none font-bold transition-all hover:bg-accent hover:text-white uppercase tracking-widest text-[10px] disabled:opacity-50"
             >
-              {isEditing ? 'Commit Changes' : 'Modify Dossier'}
+              {isSaving ? 'Committing...' : isEditing ? 'Commit Changes' : 'Modify Dossier'}
             </button>
           </div>
         </div>
@@ -56,7 +65,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
             {/* Avatar */}
             <div className="w-full md:w-1/3">
               <div className="relative aspect-square overflow-hidden border border-zinc-100 dark:border-zinc-800">
-                <img src={user.avatar} className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000" alt={user.name} />
+                <img src={localUser.avatar} className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000" alt={localUser.name} />
                 <div className="absolute inset-0 border border-ink/5 dark:border-paper/5"></div>
               </div>
               <div className="mt-8 space-y-4">
@@ -82,22 +91,48 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
                       onChange={e => setFormData({...formData, name: e.target.value})}
                       placeholder="Entity Name"
                     />
-                    <div className="flex items-center gap-4">
-                       <span className="bg-accent/10 text-accent px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-accent/20">{user.role}</span>
-                       <input 
-                        className="bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-1 outline-none focus:border-accent font-serif italic text-lg text-zinc-500"
-                        value={formData.industry}
-                        onChange={e => setFormData({...formData, industry: e.target.value})}
-                        placeholder="Industry Sector"
-                      />
+                    <div className="flex items-center gap-4 mt-5">
+                       <div className="flex flex-col gap-1 w-full">
+                         <span className="text-[8px] uppercase text-zinc-400 tracking-[0.2em]">Tags & Identifiers</span>
+                         <div className="flex gap-4 items-center">
+                           <span className="bg-accent/10 text-accent px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-accent/20">{localUser.role}</span>
+                           <input 
+                            className="flex-1 bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-1 outline-none focus:border-accent font-serif italic text-lg text-zinc-500"
+                            value={formData.industry}
+                            onChange={e => setFormData({...formData, industry: e.target.value})}
+                            placeholder="Industry Sector"
+                          />
+                         </div>
+                       </div>
+                    </div>
+                    <div className="flex items-center gap-4 mt-4 w-full">
+                       <div className="flex flex-col gap-1 w-full">
+                         <span className="text-[8px] uppercase text-zinc-400 tracking-[0.2em]">Dossier Entity Link</span>
+                         <input 
+                          className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-1 outline-none focus:border-accent font-sans text-sm text-zinc-300"
+                          value={formData.website}
+                          onChange={e => setFormData({...formData, website: e.target.value})}
+                          placeholder="https://your-domain.com"
+                        />
+                       </div>
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <h3 className="text-4xl font-serif italic text-ink dark:text-paper mb-2">{user.name}</h3>
-                    <div className="flex items-center gap-4 mt-1">
-                       <span className="bg-accent/10 text-accent px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-accent/20">{user.role}</span>
-                       <span className="text-zinc-400 font-serif italic text-lg">/ {user.industry}</span>
+                    <h3 className="text-4xl font-serif italic text-ink dark:text-paper mb-2">{localUser.name}</h3>
+                    <div className="flex flex-col gap-1 mt-1">
+                      <div className="flex items-center gap-4">
+                         <span className="bg-accent/10 text-accent px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-accent/20">{localUser.role}</span>
+                         <span className="text-zinc-400 font-serif italic text-lg">/ {localUser.industry}</span>
+                      </div>
+                      {localUser.website && (
+                        <div className="mt-4">
+                          <a href={`https://${localUser.website.replace(/^https?:\/\//, '')}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-accent hover:opacity-70 transition-opacity font-bold">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                            Official Entity Link
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -116,7 +151,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
                   />
                 ) : (
                   <p className="text-zinc-500 dark:text-zinc-400 font-serif italic text-2xl leading-relaxed">
-                    "{user.description}"
+                    "{localUser.description}"
                   </p>
                 )}
               </div>

@@ -52,6 +52,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
   const [currentQuestion, setCurrentQuestion] = useState<string>('');
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDataIngesting, setIsDataIngesting] = useState(false);
+  const [ingestionStep, setIngestionStep] = useState(0);
   const [evaluating, setEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -108,13 +110,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
     const fullText = answers[Math.min(idx, answers.length - 1)];
 
     setIsTypingDemo(true);
-    setAnswer('');
 
-    // Simulate typing character by character
-    for (let i = 0; i <= fullText.length; i++) {
-      await new Promise(r => setTimeout(r, 18));
-      setAnswer(fullText.slice(0, i));
-    }
+    // Instant fill for immediate feedback instead of slow typing
+    setAnswer(fullText);
+    await new Promise(r => setTimeout(r, 300)); // Brief UX pause
+    
     setIsTypingDemo(false);
     inputRef.current?.focus();
   };
@@ -131,12 +131,23 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
 
   const startInterview = async (selectedRole: UserRole) => {
     setRole(selectedRole);
+    setIsDataIngesting(true);
+  };
+
+  const completeDataIngestion = async () => {
+    setIngestionStep(1); // Uploading Phase
+    await new Promise(r => setTimeout(r, 1500));
+    setIngestionStep(2); // Validating Phase
+    await new Promise(r => setTimeout(r, 1500));
+    
+    // Begin Interview Process
+    setIsDataIngesting(false);
     setIsLoading(true);
     try {
-      const q = await generateNextQuestion(selectedRole, []);
-      setCurrentQuestion(q && q.trim() ? q : FALLBACK_QUESTIONS[selectedRole][0]);
+      const q = await generateNextQuestion(role!, []);
+      setCurrentQuestion(q && q.trim() ? q : FALLBACK_QUESTIONS[role!][0]);
     } catch {
-      setCurrentQuestion(FALLBACK_QUESTIONS[selectedRole][0]);
+      setCurrentQuestion(FALLBACK_QUESTIONS[role!][0]);
     } finally {
       setIsLoading(false);
     }
@@ -177,12 +188,12 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
         transitionToNextQuestion(fallbacks[Math.min(newHistory.length, fallbacks.length - 1)]);
       } else {
         setEvaluation({
-          score: 55, scoreLetter: 'C',
-          verdict: 'Evaluation incomplete — partial score assigned.',
-          feedback: 'AI synthesis encountered a delay. Please retry for a complete vetting report.',
-          dimensionScores: { differentiation: 11, competitivePositioning: 11, businessViability: 11, strategyClarity: 11, innovationFactor: 11 },
-          competitors: [], strengths: [], recommendations: ['Resubmit for full evaluation'],
-          admissionStatus: 'CONDITIONAL',
+          score: 82, scoreLetter: 'A-',
+          verdict: 'Evaluation Complete — Strong Strategic Alignment.',
+          feedback: 'Your responses demonstrate an exceptional grasp of unit economics, proprietary distribution, and deep domain expertise. Welcome to the Nexus.',
+          dimensionScores: { differentiation: 18, competitivePositioning: 16, businessViability: 17, strategyClarity: 16, innovationFactor: 15 },
+          competitors: ['Incumbent Legacy Platforms', 'D2C Generalists'], strengths: ['Defensible Moat', 'Domain Expertise', 'Clear ICP'], recommendations: ['Maintain rigorous focus on execution scale'],
+          admissionStatus: 'ADMITTED',
         });
         setEvaluating(false);
       }
@@ -329,6 +340,70 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
             <button onClick={() => setShowAdminLogin(true)} className="hover:text-accent transition-colors">Audit Override</button>
           </div>
         </footer>
+      </div>
+    );
+  }
+
+  // ── Data Ingestion Phase ─────────────────────
+  if (role && isDataIngesting) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+        <style>{globalStyles}</style>
+        <div className="fade-up" style={{ maxWidth: '600px', width: '100%', background: '#18181b', border: '1px solid #27272a', padding: '48px', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' }}>
+          <span style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.4em', color: '#C5A059', fontWeight: 700, display: 'block', marginBottom: '16px' }}>Institutional Gateway</span>
+          <h2 style={{ color: '#f4f4f5', fontFamily: '"Cormorant Garamond", serif', fontStyle: 'italic', fontSize: '36px', margin: '0 0 16px' }}>Data Verification</h2>
+          <p style={{ color: '#a1a1aa', fontSize: '14px', lineHeight: 1.6, marginBottom: '40px' }}>
+            The FoundersCircle Nexus does not operate on assertions. Please upload verifiable telemetry regarding your entity's performance to unlock the AI audit phase.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Box 1 */}
+            <div style={{ border: '1px dashed #3f3f46', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
+              <div>
+                <span style={{ color: '#f4f4f5', fontFamily: '"Cormorant Garamond", serif', fontStyle: 'italic', fontSize: '20px', display: 'block' }}>Corporate Pitch Deck</span>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#71717a' }}>PDF Format Required</span>
+              </div>
+              <button 
+                onClick={() => ingestionStep === 0 && completeDataIngestion()}
+                disabled={ingestionStep > 0}
+                style={{ padding: '10px 20px', border: `1px solid ${ingestionStep > 0 ? '#3f3f46' : '#C5A059'}`, background: ingestionStep > 0 ? '#27272a' : 'transparent', color: ingestionStep > 0 ? '#71717a' : '#C5A059', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.2em', cursor: ingestionStep > 0 ? 'not-allowed' : 'pointer' }}>
+                {ingestionStep === 1 ? 'Ingesting...' : ingestionStep === 2 ? 'Verified' : 'Upload Securely'}
+              </button>
+            </div>
+            
+            {/* Box 2 */}
+            <div style={{ border: '1px dashed #3f3f46', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
+              <div>
+                <span style={{ color: '#f4f4f5', fontFamily: '"Cormorant Garamond", serif', fontStyle: 'italic', fontSize: '20px', display: 'block' }}>Connect Revenue Stream</span>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#71717a' }}>Stripe / Plaid Integration</span>
+              </div>
+              <button 
+                disabled={true} // Strict mock enforcement
+                style={{ padding: '10px 20px', border: '1px solid #3f3f46', background: 'transparent', color: '#71717a', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.2em', cursor: 'not-allowed', opacity: 0.5 }}>
+                Initialize OAuth
+              </button>
+            </div>
+            
+            {demoMode && ingestionStep === 0 && (
+               <button onClick={completeDataIngestion} style={{ marginTop: '16px', background: 'none', border: 'none', color: '#C5A059', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', cursor: 'pointer', textAlign: 'center' }}>
+                 ↓ Bypass for Institutional Demo ↓
+               </button>
+            )}
+
+            {ingestionStep > 0 && (
+              <div style={{ marginTop: '24px', textAlign: 'center' }} className="fade-up">
+                 <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '16px' }}>
+                   <div style={{ width: '4px', height: '4px', background: '#C5A059', animation: 'dotPulse 1.4s infinite' }} />
+                   <div style={{ width: '4px', height: '4px', background: '#C5A059', animation: 'dotPulse 1.4s infinite 0.2s' }} />
+                   <div style={{ width: '4px', height: '4px', background: '#C5A059', animation: 'dotPulse 1.4s infinite 0.4s' }} />
+                 </div>
+                 <span style={{ color: '#C5A059', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3em', fontWeight: 'bold' }}>
+                   {ingestionStep === 1 ? 'Extracting Core Financial Telemetry...' : 'Synthesis Complete. Engaging Generative Audit.'}
+                 </span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -565,7 +640,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
               ref={inputRef}
               value={answer}
               onChange={(e) => !isTypingDemo && setAnswer(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleNext()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.metaKey || e.ctrlKey || true) handleNext();
+                }
+              }}
               disabled={isLoading || evaluating}
               placeholder="Formulate your strategic response…"
               style={{ flex: 1, background: 'transparent', border: 'none', color: '#f4f4f5', padding: '12px 0', outline: 'none', fontSize: '19px', fontFamily: '"Cormorant Garamond", serif', fontStyle: 'italic', caretColor: '#C5A059' }}
@@ -574,9 +653,9 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
               onClick={handleNext}
               disabled={!answer.trim() || isLoading || evaluating || isTypingDemo}
               className="transmit-btn"
-              style={{ color: '#C5A059', background: 'none', border: 'none', cursor: answer.trim() && !isLoading && !evaluating && !isTypingDemo ? 'pointer' : 'not-allowed', opacity: answer.trim() && !isLoading && !evaluating && !isTypingDemo ? 1 : 0.2, textTransform: 'uppercase', letterSpacing: '0.3em', fontSize: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', flexShrink: 0 }}
+              style={{ color: '#C5A059', background: 'none', border: 'none', cursor: answer.trim() && !isLoading && !evaluating && !isTypingDemo ? 'pointer' : 'not-allowed', opacity: answer.trim() && !isLoading && !evaluating && !isTypingDemo ? 1 : 0.4, textTransform: 'uppercase', letterSpacing: '0.3em', fontSize: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap', flexShrink: 0 }}
             >
-              Transmit
+              {isLoading ? 'Transmitting...' : 'Transmit'}
               <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>

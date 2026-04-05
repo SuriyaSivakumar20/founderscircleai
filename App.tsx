@@ -153,20 +153,32 @@ const AppRoutes: React.FC = () => {
       <Route
         path="/denied"
         element={
-          <div className="min-h-screen flex items-center justify-center bg-paper dark:bg-ink text-ink dark:text-paper p-6">
-            <div className="max-w-md text-center">
-              <h1 className="text-6xl font-serif italic mb-4 text-accent tracking-tighter">Access Denied</h1>
-              <p className="text-zinc-500 dark:text-zinc-400 mb-8 leading-relaxed font-light">
-                Your evaluation score of{' '}
-                <span className="text-ink dark:text-paper font-bold">{onboardingScore}/10</span> was not sufficient for
-                FoundersCircle. We maintain a high bar for excellence.
+          <div className="min-h-screen flex items-center justify-center bg-paper dark:bg-ink text-ink dark:text-paper p-6 relative overflow-hidden">
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none opacity-20">
+              <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(197,160,89,0.1),transparent_70%)]"></div>
+            </div>
+            <div className="max-w-xl bg-white dark:bg-zinc-900/50 p-12 border border-zinc-100 dark:border-zinc-800 relative z-10 shadow-2xl">
+              <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
+              <span className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-500 font-bold mb-2 block">Status: Waitlisted</span>
+              <h1 className="text-5xl font-serif italic mb-6 text-ink dark:text-paper tracking-tighter">Conditional Access</h1>
+              <p className="text-zinc-500 dark:text-zinc-400 mb-8 leading-relaxed font-light text-lg">
+                Your initial strategic evaluation yielded a score of <span className="text-ink dark:text-paper font-bold">{onboardingScore}/10</span>. 
+                While this doesn't meet the threshold for immediate institutional access, your profile shows promise. You have been placed on the priority waitlist.
               </p>
-              <button
-                onClick={() => navigate('/onboarding')}
-                className="border border-accent text-accent px-10 py-4 rounded-none font-medium transition-all hover:bg-accent hover:text-white uppercase tracking-widest text-xs"
-              >
-                Re-evaluate Application
-              </button>
+              <div className="flex flex-col gap-4">
+                <button
+                  onClick={() => navigate('/register')}
+                  className="w-full bg-amber-600 text-white px-6 py-5 rounded-none font-bold transition-all hover:bg-amber-700 uppercase tracking-widest text-[10px]"
+                >
+                  Confirm Waitlist Placement
+                </button>
+                <button
+                  onClick={() => navigate('/onboarding')}
+                  className="w-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 px-6 py-4 rounded-none font-medium transition-all hover:text-ink dark:hover:text-paper uppercase tracking-widest text-[10px]"
+                >
+                  Re-Attempt Vetting Protocol
+                </button>
+              </div>
             </div>
           </div>
         }

@@ -51,6 +51,16 @@ async function startServer() {
   });
 
   // ── AI Proxy Routes (Gemini runs server-side, API key is secure) ───────────
+  const STARTUP_KNOWLEDGE_BASE = `
+[STARTUP DATASET]
+1. Detect Technologies (Industrial AI, Chennai): Founders: Sriram Ramachandran. Product: AI-powered inspection platform (T-Pulse). Target: Oil & gas, infra. Moat: AI-based automated inspection reducing manual risk. Investors: Accel, Elevation.
+2. WayCool Foods (Agri-tech/Supply Chain, Chennai): Founders: Karthik Jayaraman. Product: Farm-to-retail supply chain platform. Model: B2B distribution + logistics margins. Target: Retailers, kirana stores. Moat: Efficient sourcing + reduced wastage. Investors: Lightrock, FMO.
+3. Ather Energy (Electric Vehicles, Bangalore): Founders: Tarun Mehta, Swapnil Jain. Product: Smart electric scooters + charging infra. Target: Urban commuters. Moat: Integrated EV ecosystem. Investors: Hero MotoCorp, Tiger Global.
+4. Yulu (Mobility/EV, Bangalore): Founders: Amit Gupta. Product: Shared electric micro-mobility. Target: Urban daily commuters. Moat: Last-mile mobility focus. Investors: Magna, Blume Ventures.
+5. Khatabook (Fintech, Bangalore): Founders: Ravish Naresh. Product: Digital ledger app for SMBs. Model: Freemium -> financial services. Target: Kirana stores. Moat: Simplicity + mass adoption. Investors: Sequoia India, Tencent.
+[END DATASET]
+`;
+
   app.post("/api/ai/question", async (req, res) => {
     const { role, previousInteraction } = req.body;
     try {
@@ -64,16 +74,17 @@ async function startServer() {
       const questionNumber = (previousInteraction || []).length + 1;
       const isFirst = questionNumber === 1;
 
-      const ANALYST_PERSONA = `You are a senior strategic analyst and partner at FoundersCircle, an elite private investor network. You behave like a top-tier VC partner combined with a McKinsey principal. You ask sharp, surgical, non-generic questions. You NEVER use placeholder openers. You reference real companies in the subject's specific industry.`;
+      const ANALYST_PERSONA = `You are a senior strategic analyst and partner at FoundersCircle, an elite private investor network. You are a real-world benchmark-driven evaluator. You NEVER use generic openers. \n\n${STARTUP_KNOWLEDGE_BASE}`;
 
-      const founderDirective = `The subject is a startup founder. Probe: core idea & problem, competitors (name real ones like Mia by Tanishq, Zepto, Urban Company), differentiation, revenue & margins, distribution & defensibility. Do not repeat themes. Reference the exact industry they mentioned.`;
-      const investorDirective = `The subject is a VC/investor. Probe: investment thesis & sector focus, founder evaluation framework, portfolio construction, follow-on strategy, value-add. Reference real firms like Blume Ventures, 3one4 Capital, Sequoia India.`;
+      const founderDirective = `The subject is a startup founder. CRITICAL INSTRUCTION: Dynamically match their idea to the closest startup in the [STARTUP DATASET]. If EV -> compare with Ather/Yulu. If Supply Chain -> WayCool. If Fintech SMB -> Khatabook. You MUST explicitly name the company and challenge them with real benchmarks. Always push the founder to answer: "Why will you win against [Company]?" or highlight gaps in their differentiation versus the dataset company. DO NOT hallucinate.`;
+      
+      const investorDirective = `The subject is a VC/investor. Probe: investment thesis & sector focus. Use the companies in the dataset as real-world benchmarks to test their thesis. Example: "If you are bullish on EV hardware, why haven't you invested in a play like Ather Energy?"`;
 
       const directive = role === 'FOUNDER' ? founderDirective : investorDirective;
 
       const prompt = isFirst
-        ? `${ANALYST_PERSONA}\n\n${directive}\n\nThis is Question 1 of 5. Open with a sharp, provocative question that immediately signals high-caliber vetting. No generic openers. Return ONLY the question text.`
-        : `${ANALYST_PERSONA}\n\n${directive}\n\nConversation so far:\n${conversationHistory}\n\nThis is Question ${questionNumber} of 5. Based specifically on the subject's LAST ANSWER: extract their industry/sector/domain, name a real competitor or benchmark, and ask ONE penetrating follow-up from a new angle not yet covered. Return ONLY the question text.`;
+        ? `${ANALYST_PERSONA}\n\n${directive}\n\nThis is Question 1 of 5. Ask a sharp boundary-setting question to identify their exact industry so you can benchmark them. Return ONLY the question text.`
+        : `${ANALYST_PERSONA}\n\n${directive}\n\nConversation so far:\n${conversationHistory}\n\nThis is Question ${questionNumber} of 5. Based specifically on their last answer, MATCH their domain to a company in the dataset, call out the company by name, and demand to know how they are differentiated. Return ONLY the question text.`;
 
       const responseStream = await ai.models.generateContentStream({ model: 'gemini-2.0-flash', contents: prompt });
 
@@ -122,19 +133,24 @@ async function startServer() {
       const roleContext = role === 'FOUNDER' ? 'startup founder' : 'venture capitalist';
 
       const prompt = `You are a rigorous strategic analyst evaluating a ${roleContext} for elite network admission.
+      
+${STARTUP_KNOWLEDGE_BASE}
 
 Full interview:
 ${log}
 
+EVALUATION RULES: 
+If the founder was challenged by a benchmark company (e.g. Ather, WayCool, Khatabook) and failed to provide a highly convincing, specific differentiation or moat against them, heavily DOCK points from their Differentiation and Strategy Clarity scores.
+
 Score each dimension out of 20 (total = 100):
-1. Differentiation (0-20): uniqueness vs competitors
+1. Differentiation (0-20): uniqueness vs dataset competitors
 2. Competitive Positioning (0-20): knowledge of real market players
 3. Business Viability (0-20): financial soundness of model/thesis
 4. Strategy Clarity (0-20): specificity and coherence of answers
 5. Innovation Factor (0-20): genuine edge or insight
 
 Sum = total score.
-Admission: ADMITTED if ≥70, CONDITIONAL if 45-69, REJECTED if <45.
+Admission: ADMITTED if >=70, CONDITIONAL if 45-69, REJECTED if <45.
 Identify real competitors/companies mentioned or implied.
 Write 2-3 specific strengths and 2-3 actionable improvement areas.
 Verdict = one sentence of 10-15 words.

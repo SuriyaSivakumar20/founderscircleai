@@ -166,8 +166,13 @@ const timeAgo = (dateStr: string): string => {
 
 const Feed: React.FC<FeedProps> = ({ user }) => {
   const [posts, setPosts] = useState<MockPost[]>(MOCK_POSTS);
-  const [newPostContent, setNewPostContent] = useState('');
-  const [endorsedIds, setEndorsedIds] = useState<Set<string>>(new Set());
+  const [dealForm, setDealForm] = useState({
+    tag: user.role === 'FOUNDER' ? 'Raising Series A' : 'Investment Mandate',
+    metric: user.role === 'FOUNDER' ? '₹10 Cr' : '₹5-15 Cr',
+    metricLabel: user.role === 'FOUNDER' ? 'Target Raise' : 'Ticket Size',
+    content: ''
+  });
+  const [requestedRooms, setRequestedRooms] = useState<Set<string>>(new Set());
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -175,12 +180,12 @@ const Feed: React.FC<FeedProps> = ({ user }) => {
     (anime as any)({
       targets: '.feed-item',
       opacity: [0, 1],
-      translateY: [40, 0],
-      delay: anime.stagger(120),
-      duration: 900,
+      translateY: [30, 0],
+      delay: anime.stagger(100),
+      duration: 800,
       easing: 'easeOutExpo',
     });
-  }, []);
+  }, [posts.length]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -192,34 +197,35 @@ const Feed: React.FC<FeedProps> = ({ user }) => {
   };
 
   const handlePost = () => {
-    if (!newPostContent.trim()) return;
+    if (!dealForm.content.trim()) return;
     const userPost: MockPost = {
       id: `user-${Date.now()}`,
-      type: 'COMPANY',
+      type: user.role === 'FOUNDER' ? 'COMPANY' : 'INVESTOR',
       author: {
         name: user.name,
-        title: user.role === 'FOUNDER' ? 'Founder · Private' : 'Investor · Private',
+        title: user.role === 'FOUNDER' ? 'Founder · Verified Entity' : 'Investor · Institutional Agent',
         avatar: user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${user.name}`,
-        industry: user.industry || 'General',
+        industry: user.industry || 'Multi-Sector',
         location: 'India',
-        verified: false,
+        verified: true,
       },
-      content: newPostContent,
-      tag: user.role === 'FOUNDER' ? 'Startup Update' : 'Investment Interest',
+      content: dealForm.content,
+      tag: dealForm.tag,
       tagColor: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+      metric: dealForm.metric,
+      metricLabel: dealForm.metricLabel,
       image: attachedImage || `https://picsum.photos/seed/${Date.now()}/600/400`,
       createdAt: new Date().toISOString(),
       endorsements: 0,
     };
     setPosts([userPost, ...posts]);
-    setNewPostContent('');
+    setDealForm({ ...dealForm, content: '' });
     setAttachedImage(null);
   };
 
-  const handleEndorse = (id: string) => {
-    if (endorsedIds.has(id)) return;
-    setEndorsedIds(prev => new Set(prev).add(id));
-    setPosts(prev => prev.map(p => p.id === id ? { ...p, endorsements: p.endorsements + 1 } : p));
+  const handleRequestRoom = (id: string) => {
+    if (requestedRooms.has(id)) return;
+    setRequestedRooms(prev => new Set(prev).add(id));
   };
 
   return (
@@ -231,13 +237,30 @@ const Feed: React.FC<FeedProps> = ({ user }) => {
           <div className="hidden sm:block flex-shrink-0">
             <img src={user.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${user.name}`} className="w-14 h-14 rounded-none object-cover" alt="Me" />
           </div>
-          <div className="flex-1">
-            <span className="text-[10px] uppercase tracking-[0.3em] text-accent font-bold mb-3 block">New Insight</span>
+          <div className="flex-1 w-full">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-accent font-bold mb-4 block">Draft Deal Card</span>
+            <div className="flex gap-4 mb-4">
+              <input 
+                 className="flex-1 bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-2 outline-none focus:border-accent font-sans text-sm text-ink dark:text-paper"
+                 placeholder="Status (e.g. Raising Seed)"
+                 value={dealForm.tag}
+                 onChange={e => setDealForm({...dealForm, tag: e.target.value})}
+              />
+              <input 
+                 className="flex-1 bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-2 outline-none focus:border-accent font-sans text-sm text-ink dark:text-paper"
+                 placeholder="Metric (e.g. ₹5 Cr)"
+                 value={dealForm.metric}
+                 onChange={e => setDealForm({...dealForm, metric: e.target.value})}
+              />
+            </div>
             <textarea
               className="w-full bg-transparent border-none p-0 outline-none resize-none h-20 placeholder-zinc-300 dark:placeholder-zinc-600 text-ink dark:text-paper font-serif text-xl italic leading-relaxed"
-              placeholder={`Share a market insight or funding interest, ${user.name.split(' ')[0]}…`}
-              value={newPostContent}
-              onChange={(e) => setNewPostContent(e.target.value)}
+              placeholder={`Detail your strategic mandate or moats, ${user.name.split(' ')[0]}…`}
+              value={dealForm.content}
+              onChange={(e) => setDealForm({...dealForm, content: e.target.value})}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handlePost();
+              }}
             />
           </div>
         </div>
@@ -259,10 +282,10 @@ const Feed: React.FC<FeedProps> = ({ user }) => {
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
           <button
             onClick={handlePost}
-            disabled={!newPostContent.trim()}
+            disabled={!dealForm.content.trim()}
             className="border border-accent text-accent px-8 py-3 font-bold transition-all hover:bg-accent hover:text-white active:scale-95 uppercase tracking-widest text-[10px] disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            Publish Insight
+            Deploy Capital Protocol
           </button>
         </div>
       </div>
@@ -351,23 +374,16 @@ const Feed: React.FC<FeedProps> = ({ user }) => {
                   <div className="flex items-center justify-between pt-6 border-t border-zinc-50 dark:border-zinc-800/60">
                     <div className="flex gap-6">
                       <button
-                        onClick={() => handleEndorse(post.id)}
-                        className={`flex items-center gap-2 transition-colors uppercase tracking-widest text-[9px] font-bold ${endorsedIds.has(post.id) ? 'text-accent' : 'text-zinc-400 hover:text-accent'
+                        onClick={() => handleRequestRoom(post.id)}
+                        disabled={requestedRooms.has(post.id)}
+                        className={`flex items-center gap-2 border px-6 py-2 transition-colors uppercase tracking-widest text-[9px] font-bold ${requestedRooms.has(post.id) ? 'border-accent bg-accent/10 text-accent cursor-not-allowed' : 'border-zinc-200 dark:border-zinc-700 text-zinc-400 hover:text-accent hover:border-accent'
                           }`}
                       >
-                        <svg className="w-4 h-4" fill={endorsedIds.has(post.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-                        </svg>
-                        <span className="text-accent italic text-sm">{post.endorsements}</span> Endorse
-                      </button>
-                      <button className="text-zinc-400 hover:text-accent transition-colors uppercase tracking-widest text-[9px] font-bold">
-                        Request Briefing
+                        {requestedRooms.has(post.id) ? 'Pending Counterparty Signature' : 'Request Data Room Access'}
                       </button>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button className="text-zinc-300 hover:text-accent transition-all">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                      </button>
+                    <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-zinc-400 font-bold">
+                       <span className="flex items-center gap-1.5"><svg className="w-3 h-3 text-accent" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg> Verified Match</span>
                     </div>
                   </div>
                 </div>

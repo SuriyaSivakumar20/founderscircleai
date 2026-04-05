@@ -1,25 +1,46 @@
 @import "tailwindcss";
 
+/* ── Enable class-based dark mode (Tailwind v4) ──────────── */
+/* App.tsx toggles `dark` class on <html>; this wires it up  */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-    --font-family-sans: 'Inter', sans-serif;
-    --font-family-serif: 'Cormorant Garamond', serif;
+    --font-family-sans: 'Plus Jakarta Sans', sans-serif;
+    --font-family-serif: 'Playfair Display', serif;
 
-    --color-primary-50: #f4f7f7;
-    --color-primary-100: #e9efef;
-    --color-primary-200: #d3dfdf;
-    --color-primary-300: #bdcfcf;
-    --color-primary-400: #91afaf;
-    --color-primary-500: #658f8f;
-    --color-primary-600: #2D3A3A;
-    --color-primary-700: #253030;
-    --color-primary-800: #1c2424;
-    --color-primary-900: #121818;
-    --color-primary-950: #090c0c;
+    --color-primary-50: #eff6ff;
+    --color-primary-100: #dbeafe;
+    --color-primary-200: #bfdbfe;
+    --color-primary-300: #93c5fd;
+    --color-primary-400: #60a5fa;
+    --color-primary-500: #3b82f6;
+    --color-primary-600: #2563EB;
+    --color-primary-700: #1d4ed8;
+    --color-primary-800: #1e40af;
+    --color-primary-900: #1e3a8a;
+    --color-primary-950: #172554;
 
-    --color-accent: #C5A059;
-    --color-accent-light: #D4B87E;
-    --color-accent-dark: #A68241;
+    --color-accent: #2563EB;
+    --color-accent-light: #3b82f6;
+    --color-accent-dark: #1d4ed8;
 
-    --color-paper: #F5F2ED;
-    --color-ink: #1A1A1A;
+    --color-secondary: #F1F5F9;
+
+    --color-paper: #FFFFFF;
+    --color-ink: #0F172A;
+}
+
+/* ── Global typography defaults ─────────────────────────── */
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
+}
+
+h1, h2, h3, h4 {
+    font-family: 'Playfair Display', serif;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
 }
