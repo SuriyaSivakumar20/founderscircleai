@@ -1,39 +1,18 @@
 import { PrismaClient } from '@prisma/client';
-import fs from 'fs';
-import path from 'path';
 
-let prisma: PrismaClient;
+// Single shared PrismaClient instance — works for both local and Vercel
+// Local: SQLite via DATABASE_URL=file:./dev.db  
+// Vercel: PostgreSQL via DATABASE_URL=postgresql://...@neon.tech/...
 
-if (process.env.VERCEL) {
-    // Vercel Serverless Functions have a read-only filesystem, except for /tmp
-    const originalDbPath = path.join(process.cwd(), 'prisma', 'dev.db');
-    const tmpDbPath = '/tmp/dev.db';
+declare global {
+  // Prevent multiple instances during hot reload in dev
+  var __prisma: PrismaClient | undefined;
+}
 
-    try {
-        if (!fs.existsSync(tmpDbPath)) {
-            if (fs.existsSync(originalDbPath)) {
-                fs.copyFileSync(originalDbPath, tmpDbPath);
-                console.log('Copied SQLite database to /tmp for Vercel Serverless execution.');
-            } else {
-                console.warn('Original database not found. Prisma may fail to initialize.');
-            }
-        }
+const prisma = globalThis.__prisma ?? new PrismaClient();
 
-        prisma = new PrismaClient({
-            datasources: {
-                db: {
-                    url: 'file:/tmp/dev.db',
-                },
-            },
-        });
-    } catch (error) {
-        console.error('Failed to initialize Vercel Prisma DB interceptor:', error);
-        // Fallback just in case
-        prisma = new PrismaClient();
-    }
-} else {
-    // Local Development
-    prisma = new PrismaClient();
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.__prisma = prisma;
 }
 
 export default prisma;

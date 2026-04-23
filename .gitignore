@@ -24,3 +24,13 @@ dist-ssr
 *.sw?
 
 /generated/prisma
+
+# Environment — NEVER commit secrets
+.env
+.env.local
+.env.production
+
+# SQLite files — no longer needed (using PostgreSQL)
+*.db
+*.sqlite
+database.sqlite

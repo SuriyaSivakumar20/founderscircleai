@@ -1,4 +1,3 @@
-
 # FoundersCircle API Documentation
 
 ## Base URL
