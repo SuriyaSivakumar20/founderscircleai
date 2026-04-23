@@ -60,7 +60,12 @@ export const apiService = {
       params: filters,
       headers: getAuthHeader(),
     });
-    return response.data; // { matches: [...], total: n }
+    return response.data; // { matches: [...], total: n, viewerRole: string }
+  },
+
+  async expressInterest(entityId: string, entityType: 'company' | 'investor') {
+    const response = await axios.post(`${API_URL}/matches/interest`, { entityId, entityType }, { headers: getAuthHeader() });
+    return response.data;
   },
 
   // ── Connections ──────────────────────────────────────────────────────────

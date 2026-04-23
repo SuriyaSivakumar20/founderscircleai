@@ -24,28 +24,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
     setIsLoading(true);
 
     try {
-      // ── Client-side demo bypass — works even if Neon DB is cold ──────────
-      const demo = DEMO_ACCOUNTS.find(
-        d => d.email === email.trim().toLowerCase() && d.password === password
-      );
-      if (demo) {
-        const demoUser: User = {
-          id: `demo-${demo.role.toLowerCase()}-id`,
-          email: demo.email,
-          name: demo.name,
-          role: demo.role,
-          industry: demo.industry,
-          description: `Demo ${demo.role.toLowerCase()} account for B.I.R.D platform review.`,
-          avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${demo.name}&backgroundColor=dbeafe&textColor=1e40af`,
-          createdAt: new Date().toISOString(),
-        };
-        localStorage.setItem('founders_circle_token', 'demo-token-bypass');
-        localStorage.setItem('founders_circle_demo_user', JSON.stringify(demoUser));
-        setIsLoading(false);
-        onLogin(demoUser);
-        return;
-      }
-      // ────────────────────────────────────────────────────────────────────
+      // Removed fake client-side demo bypass. Real DB now handles all auth.
 
       const data = await apiService.login({ email: email.trim().toLowerCase(), password });
       onLogin(data.user);

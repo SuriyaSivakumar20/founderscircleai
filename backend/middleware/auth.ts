@@ -11,20 +11,7 @@ export const authenticate = async (req: any, res: Response, next: NextFunction) 
       return res.status(401).json({ message: 'Unauthorized — no token provided' });
     }
 
-    // Special bypass for guest/demo token — gives read-only access to public data
     const token = authHeader.split(' ')[1];
-    if (token === 'demo-token-bypass') {
-      req.user = {
-        id: 'guest-bypass-001',
-        email: 'guest@bird.ai',
-        name: 'Guest',
-        role: 'FOUNDER',
-        industry: 'Technology',
-        location: 'India',
-        createdAt: new Date().toISOString(),
-      };
-      return next();
-    }
 
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
 

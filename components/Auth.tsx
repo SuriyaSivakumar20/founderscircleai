@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { apiService } from '../services/apiService';
@@ -8,14 +7,37 @@ interface AuthProps {
   onRegister: (user: User) => void;
 }
 
+const SECTORS = [
+  'Fintech / Payments',
+  'Fintech / Lending',
+  'SaaS / B2B',
+  'SaaS / Enterprise Software',
+  'HealthTech',
+  'EdTech',
+  'Quick Commerce / E-commerce',
+  'Logistics / Supply Chain',
+  'Manufacturing / Deep Tech',
+  'AI / Machine Learning',
+  'CleanTech / Sustainability',
+  'Agriculture / AgriTech',
+  'Mobility / EV',
+  'Consumer / D2C',
+  'Media / Content',
+  'Venture Capital',
+  'Technology',
+  'Other',
+];
+
 const Auth: React.FC<AuthProps> = ({ onboardingScore, onRegister }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    confirmPassword: '',
     name: '',
-    industry: 'Technology',
+    industry: 'Fintech / Payments',
+    location: '',
     description: '',
-    role: 'FOUNDER' as UserRole
+    role: 'FOUNDER' as UserRole,
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -23,133 +45,226 @@ const Auth: React.FC<AuthProps> = ({ onboardingScore, onRegister }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
     setIsLoading(true);
     try {
+      // Direct call to POST /api/auth/register — saved permanently to PostgreSQL (Neon)
       const data = await apiService.register({
-        ...formData,
-        avatar: `https://picsum.photos/seed/${formData.name}/200`,
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        name: formData.name.trim(),
+        role: formData.role,
+        industry: formData.industry,
+        location: formData.location.trim() || undefined,
+        description: formData.description.trim() || undefined,
+        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(formData.name)}&backgroundColor=dbeafe&textColor=1e40af`,
       });
+      // data.token is stored by apiService.register → localStorage
       onRegister(data.user);
     } catch (err: any) {
-      console.warn('Backend registration failed. Generating local demo profile bypass.', err);
-      const fallbackUser: User = {
-        id: `demo-${Math.random().toString(36).substr(2, 9)}`,
-        email: formData.email,
-        name: formData.name,
-        role: formData.role || 'FOUNDER',
-        industry: formData.industry,
-        description: formData.description,
-        avatar: `https://picsum.photos/seed/${formData.name}/200`,
-        createdAt: new Date().toISOString(),
-      };
-      localStorage.setItem('founders_circle_token', 'demo-token-bypass');
-      localStorage.setItem('founders_circle_demo_user', JSON.stringify(fallbackUser));
-      onRegister(fallbackUser);
+      // Show the real error — NO silent fallback that hides DB failures
+      const msg = err?.response?.data?.message
+        || err?.response?.data?.errors?.[0]?.message
+        || 'Registration failed. Please try again.';
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const isFounder = formData.role === 'FOUNDER';
+
   return (
-    <div className="min-h-screen bg-paper dark:bg-ink flex items-center justify-center p-6">
-      <div className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-accent"></div>
-        
-        <div className="p-12 border-b border-zinc-50 dark:border-zinc-800 flex justify-between items-end">
-          <div>
-            <span className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-2 block">Identity Initialization</span>
-            <h2 className="text-5xl font-serif italic text-ink dark:text-paper tracking-tight">Inner Circle</h2>
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b1120] flex items-center justify-center p-6">
+      <div className="w-full max-w-2xl">
+
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/30 mb-4 text-2xl">
+            🐦
           </div>
-          <div className="text-right">
-             <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold block mb-1">Audit Result</span>
-             <span className="text-3xl font-serif italic text-accent">{onboardingScore}<span className="text-sm not-italic opacity-30">/10</span></span>
-          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Create your B.I.R.D profile
+          </h1>
+          <p className="text-slate-500 mt-2 text-sm">
+            AI Vetting Score:
+            <span className="ml-1 font-bold text-blue-600">{onboardingScore}/10</span>
+            {' '}— Your account will be permanently saved to our database.
+          </p>
         </div>
-        
-        <form onSubmit={handleSubmit} className="p-12 space-y-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-            <div className="space-y-2">
-              <label className="text-[9px] uppercase tracking-[0.3em] text-zinc-400 font-bold block">Email Address</label>
-              <input 
-                type="email"
+
+        <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-8">
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+
+            {/* Role toggle */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                I am joining as a
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {(['FOUNDER', 'INVESTOR'] as UserRole[]).map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setFormData(f => ({ ...f, role: r }))}
+                    className={`py-3 rounded-xl border text-sm font-semibold transition-all ${
+                      formData.role === r
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                    }`}
+                  >
+                    {r === 'FOUNDER' ? '🚀 Startup Founder' : '💼 Investor / VC'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                {isFounder
+                  ? 'As a Founder, you\'ll see matched investors on your Discover page.'
+                  : 'As an Investor, you\'ll see matched startups on your Discover page.'}
+              </p>
+            </div>
+
+            {/* Name + Email */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  {isFounder ? 'Your Full Name' : 'Name / Firm Name'}
+                </label>
+                <input
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all dark:text-white"
+                  placeholder={isFounder ? 'Arjun Nair' : 'Kavya Reddy / Blume Ventures'}
+                  value={formData.name}
+                  onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all dark:text-white"
+                  placeholder="you@example.com"
+                  value={formData.email}
+                  onChange={e => setFormData(f => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all dark:text-white"
+                  placeholder="Min 6 characters"
+                  value={formData.password}
+                  onChange={e => setFormData(f => ({ ...f, password: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all dark:text-white"
+                  placeholder="Repeat password"
+                  value={formData.confirmPassword}
+                  onChange={e => setFormData(f => ({ ...f, confirmPassword: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Sector + Location */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  {isFounder ? 'Your Sector' : 'Focus Sectors'}
+                </label>
+                <select
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 transition-all dark:text-white cursor-pointer"
+                  value={formData.industry}
+                  onChange={e => setFormData(f => ({ ...f, industry: e.target.value }))}
+                >
+                  {SECTORS.map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Location</label>
+                <input
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all dark:text-white"
+                  placeholder="Bengaluru, Karnataka"
+                  value={formData.location}
+                  onChange={e => setFormData(f => ({ ...f, location: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Bio */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                {isFounder ? 'What are you building?' : 'Investment thesis / mandate'}
+              </label>
+              <textarea
                 required
-                className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-3 outline-none focus:border-accent font-serif italic text-xl text-ink dark:text-paper placeholder-zinc-200"
-                placeholder="nexus@founderscircle.in"
-                value={formData.email}
-                onChange={e => setFormData({...formData, email: e.target.value})}
+                rows={3}
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all dark:text-white resize-none"
+                placeholder={
+                  isFounder
+                    ? 'Building payment infrastructure for India\'s 50M SMBs. ₹4.2 Cr ARR, Seed stage...'
+                    : 'Deploying ₹5–20 Cr at Seed stage in B2B SaaS and Fintech. 6+ months traction required...'
+                }
+                value={formData.description}
+                onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-[9px] uppercase tracking-[0.3em] text-zinc-400 font-bold block">Access Key (Password)</label>
-              <input 
-                type="password"
-                required
-                className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-3 outline-none focus:border-accent font-serif italic text-xl text-ink dark:text-paper placeholder-zinc-200"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={e => setFormData({...formData, password: e.target.value})}
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-            <div className="space-y-2">
-              <label className="text-[9px] uppercase tracking-[0.3em] text-zinc-400 font-bold block">Entity Designation</label>
-              <input 
-                required
-                className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-3 outline-none focus:border-accent font-serif italic text-2xl text-ink dark:text-paper placeholder-zinc-200"
-                placeholder="Full Name / Firm"
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="text-[9px] uppercase tracking-[0.3em] text-zinc-400 font-bold block">Sector Domain</label>
-              <select 
-                className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-3 outline-none focus:border-accent font-serif italic text-xl text-zinc-500 appearance-none cursor-pointer"
-                value={formData.industry}
-                onChange={e => setFormData({...formData, industry: e.target.value})}
-              >
-                <option>Technology</option>
-                <option>Medical / Healthcare</option>
-                <option>Finance / Fintech</option>
-                <option>Energy / Sustainability</option>
-                <option>Consumer Goods</option>
-              </select>
-            </div>
-          </div>
+            {error && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm font-medium px-4 py-3 rounded-xl flex items-start gap-2">
+                <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {error}
+              </div>
+            )}
 
-          <div className="space-y-2">
-            <label className="text-[9px] uppercase tracking-[0.3em] text-zinc-400 font-bold block">Strategic Narrative</label>
-            <textarea 
-              required
-              className="w-full bg-zinc-50 dark:bg-zinc-800/20 border border-zinc-100 dark:border-zinc-800 p-8 outline-none focus:border-accent h-32 resize-none font-serif italic text-xl text-zinc-600 dark:text-zinc-400 leading-relaxed"
-              placeholder="Articulate your institutional vision..."
-              value={formData.description}
-              onChange={e => setFormData({...formData, description: e.target.value})}
-            />
-          </div>
-
-          {error && (
-            <p className="text-red-800 dark:text-red-400 text-[10px] uppercase tracking-widest font-bold italic">
-              {error}
-            </p>
-          )}
-
-          <div className="pt-6">
-            <button 
+            <button
               type="submit"
               disabled={isLoading}
-              className="w-full border border-accent text-accent py-5 rounded-none font-bold transition-all hover:bg-accent hover:text-white uppercase tracking-[0.4em] text-[10px] shadow-xl shadow-accent/5 active:scale-95 disabled:opacity-50"
+              className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-semibold text-sm transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50 shadow-sm flex items-center justify-center gap-2"
             >
-              {isLoading ? 'Initializing...' : 'Initialize Profile Dossier'}
+              {isLoading && (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
+              {isLoading ? 'Creating your account...' : 'Create B.I.R.D Account'}
             </button>
-            <p className="text-center mt-6 text-[8px] uppercase tracking-[0.3em] text-zinc-400 font-bold">
-              By proceeding, you agree to the institutional terms of engagement.
+
+            <p className="text-center text-xs text-slate-400">
+              Your profile is permanently saved to our secure database and will persist across all sessions.
             </p>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

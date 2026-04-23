@@ -40,16 +40,7 @@ const AppRoutes: React.FC = () => {
 
       const token = localStorage.getItem('founders_circle_token');
       if (token) {
-        // ── Demo user restore on page refresh (no backend call needed) ──
-        if (token === 'demo-token-bypass') {
-          const demoUser = localStorage.getItem('founders_circle_demo_user');
-          if (demoUser) {
-            setUser(JSON.parse(demoUser));
-            setAuthChecked(true);
-            return;
-          }
-        }
-        // ────────────────────────────────────────────────────────────────
+
         try {
           const userData = await apiService.getMe();
           setUser(userData);
