@@ -1,4 +1,4 @@
-import prisma from '../prismaClient';
+import prisma from '../prismaClient.js';
 import bcrypt from 'bcryptjs';
 
 export const seedDatabase = async () => {

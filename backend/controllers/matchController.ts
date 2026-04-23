@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import prisma from '../prismaClient';
-import { computeMatchScore, getMatchLabel } from '../utils/matchingEngine';
+import prisma from '../prismaClient.js';
+import { computeMatchScore, getMatchLabel } from '../utils/matchingEngine.js';
 
 /**
  * GET /api/matches?sector=Fintech&stage=Seed&location=Bengaluru

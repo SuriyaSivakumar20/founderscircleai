@@ -9,13 +9,13 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import authRoutes from "../backend/routes/authRoutes";
-import postRoutes from "../backend/routes/postRoutes";
-import userRoutes from "../backend/routes/userRoutes";
-import matchRoutes from "../backend/routes/matchRoutes";
-import connectionRoutes from "../backend/routes/connectionRoutes";
-import analyticsRoutes from "../backend/routes/analyticsRoutes";
-import notificationRoutes from "../backend/routes/notificationRoutes";
+import authRoutes from '../backend/routes/authRoutes.js';
+import postRoutes from '../backend/routes/postRoutes.js';
+import userRoutes from '../backend/routes/userRoutes.js';
+import matchRoutes from '../backend/routes/matchRoutes.js';
+import connectionRoutes from '../backend/routes/connectionRoutes.js';
+import analyticsRoutes from '../backend/routes/analyticsRoutes.js';
+import notificationRoutes from '../backend/routes/notificationRoutes.js';
 
 dotenv.config();
 

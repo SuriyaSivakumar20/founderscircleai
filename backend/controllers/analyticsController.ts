@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import prisma from '../prismaClient';
+import prisma from '../prismaClient.js';
 
 /**
  * GET /api/analytics/summary

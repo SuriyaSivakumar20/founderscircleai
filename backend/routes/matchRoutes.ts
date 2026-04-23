@@ -1,6 +1,6 @@
 import express from 'express';
-import { getMatches, expressInterest } from '../controllers/matchController';
-import { authenticate } from '../middleware/auth';
+import { getMatches, expressInterest } from '../controllers/matchController.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 

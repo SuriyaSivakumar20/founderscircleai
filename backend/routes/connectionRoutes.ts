@@ -3,8 +3,8 @@ import {
   sendConnection,
   getMyConnections,
   updateConnectionStatus,
-} from '../controllers/connectionController';
-import { authenticate } from '../middleware/auth';
+} from '../controllers/connectionController.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 

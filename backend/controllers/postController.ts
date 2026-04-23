@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import prisma from '../prismaClient';
+import prisma from '../prismaClient.js';
 import { z } from 'zod';
 
 const postSchema = z.object({

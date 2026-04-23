@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import prisma from '../prismaClient';
-import { computeMatchScore } from '../utils/matchingEngine';
+import prisma from '../prismaClient.js';
+import { computeMatchScore } from '../utils/matchingEngine.js';
 
 /**
  * POST /api/connections

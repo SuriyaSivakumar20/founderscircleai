@@ -1,8 +1,8 @@
 
 import { DataTypes, Model } from 'sequelize';
-import sequelize from '../config/db';
-import User from './User';
-import Post from './Post';
+import sequelize from '../config/db.js';
+import User from './User.js';
+import Post from './Post.js';
 
 class Like extends Model {
   public id!: string;

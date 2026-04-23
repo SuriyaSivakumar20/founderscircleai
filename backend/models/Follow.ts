@@ -1,7 +1,7 @@
 
 import { DataTypes, Model } from 'sequelize';
-import sequelize from '../config/db';
-import User from './User';
+import sequelize from '../config/db.js';
+import User from './User.js';
 
 class Follow extends Model {
   public id!: string;

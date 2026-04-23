@@ -1,10 +1,10 @@
 
-import sequelize from '../config/db';
-import User from './User';
-import Post from './Post';
-import Like from './Like';
-import Follow from './Follow';
-import Comment from './Comment';
+import sequelize from '../config/db.js';
+import User from './User.js';
+import Post from './Post.js';
+import Like from './Like.js';
+import Follow from './Follow.js';
+import Comment from './Comment.js';
 
 const syncDb = async (force = false) => {
   try {

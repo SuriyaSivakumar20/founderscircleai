@@ -1,7 +1,7 @@
 
 import express from 'express';
-import { getProfile, updateProfile, followUser, getCompanies, getInvestors } from '../controllers/userController';
-import { authenticate } from '../middleware/auth';
+import { getProfile, updateProfile, followUser, getCompanies, getInvestors } from '../controllers/userController.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 

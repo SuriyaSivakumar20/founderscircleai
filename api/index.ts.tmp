@@ -1,0 +1,10 @@
+import express from "express";
+
+let realApp: any;
+let initError: any;
+
+try {
+  // We use a dynamic require or import here to catch errors
+  // Wait, top level await isn't allowed unless we use it.
+} catch (e) {
+}
