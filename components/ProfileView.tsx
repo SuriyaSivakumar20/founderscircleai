@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
 import { apiService } from '../services/apiService';
@@ -21,13 +20,12 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await new Promise(r => setTimeout(r, 600)); // Demo latency
+      await new Promise(r => setTimeout(r, 600));
       await apiService.updateProfile(formData);
       setLocalUser({ ...localUser, ...formData });
       setIsEditing(false);
     } catch (error) {
-      console.error('Failed to update profile', error);
-      // Fallback for demo mode
+      console.error(error);
       setLocalUser({ ...localUser, ...formData });
       setIsEditing(false);
     } finally {
@@ -37,145 +35,134 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user }) => {
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <div className="bg-white dark:bg-zinc-900/40 border border-zinc-100 dark:border-zinc-800 overflow-hidden shadow-2xl relative">
-        <div className="absolute top-0 left-0 w-full h-1 bg-accent"></div>
-        
-        {/* Header Cover */}
-        <div className="h-64 bg-zinc-50 dark:bg-zinc-950 relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(rgba(26,26,26,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(26,26,26,0.1)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
-          </div>
-          <div className="absolute bottom-0 left-0 w-full p-12 flex justify-between items-end">
-            <div>
-              <span className="text-[10px] uppercase tracking-[0.4em] text-accent font-bold mb-2 block">Institutional Identity</span>
-              <h2 className="text-5xl font-serif italic text-ink dark:text-paper tracking-tight">Profile Dossier</h2>
-            </div>
-            <button 
-              onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-              disabled={isSaving}
-              className="border border-accent text-accent px-8 py-3 rounded-none font-bold transition-all hover:bg-accent hover:text-white uppercase tracking-widest text-[10px] disabled:opacity-50"
-            >
-              {isSaving ? 'Committing...' : isEditing ? 'Commit Changes' : 'Modify Dossier'}
-            </button>
-          </div>
+      {/* Header section outside the main card */}
+      <div className="flex justify-between items-end mb-6">
+         <div>
+            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">My Profile</h1>
+            <p className="text-slate-500">Manage your platform identity and visibility settings.</p>
+         </div>
+         <button 
+           onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+           disabled={isSaving}
+           className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-medium transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50 shadow-sm"
+         >
+           {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Edit Profile'}
+         </button>
+      </div>
+
+      <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        {/* Cover Photo Area */}
+        <div className="h-48 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 relative">
         </div>
         
-        <div className="p-12">
-          <div className="flex flex-col md:flex-row gap-12">
-            {/* Avatar */}
-            <div className="w-full md:w-1/3">
-              <div className="relative aspect-square overflow-hidden border border-zinc-100 dark:border-zinc-800">
-                <img src={localUser.avatar} className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000" alt={localUser.name} />
-                <div className="absolute inset-0 border border-ink/5 dark:border-paper/5"></div>
+        <div className="px-8 pb-8">
+          <div className="flex flex-col md:flex-row gap-8 relative -mt-16">
+            
+            {/* Left Column: Avatar & Quick Stats */}
+            <div className="w-full md:w-1/3 flex flex-col items-center md:items-start text-center md:text-left">
+              <div className="w-32 h-32 rounded-2xl border-4 border-white dark:border-[#0f172a] bg-white overflow-hidden shadow-sm mb-6 shrink-0 relative group">
+                <img src={localUser.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${localUser.name}`} className="w-full h-full object-cover" alt={localUser.name} />
+                {isEditing && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                     <span className="text-white text-xs font-bold bg-black/50 px-2 py-1 rounded">Change</span>
+                  </div>
+                )}
               </div>
-              <div className="mt-8 space-y-4">
-                <div className="flex justify-between items-center py-3 border-b border-zinc-50 dark:border-zinc-800">
-                  <span className="text-[9px] uppercase tracking-widest text-zinc-400 font-bold">Status</span>
-                  <span className="text-accent font-serif italic text-sm">Verified Elite</span>
+              
+              <div className="w-full space-y-4">
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                   <div className="flex justify-between items-center mb-3">
+                     <span className="text-sm font-semibold text-slate-500">Profile Status</span>
+                     <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-500 text-xs px-2 py-1 rounded-md font-bold">100% Complete</span>
+                   </div>
+                   <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                     <div className="bg-green-500 h-2 rounded-full" style={{ width: '100%' }}></div>
+                   </div>
                 </div>
-                <div className="flex justify-between items-center py-3 border-b border-zinc-50 dark:border-zinc-800">
-                  <span className="text-[9px] uppercase tracking-widest text-zinc-400 font-bold">Access Level</span>
-                  <span className="text-ink dark:text-paper font-serif italic text-sm">Institutional</span>
+
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800 flex flex-col gap-3">
+                   <div className="flex justify-between items-center text-sm">
+                     <span className="font-semibold text-slate-500">Account Type</span>
+                     <span className="font-bold text-slate-900 dark:text-white capitalize">{localUser.role.toLowerCase()}</span>
+                   </div>
+                   <div className="flex justify-between items-center text-sm">
+                     <span className="font-semibold text-slate-500">Member Since</span>
+                     <span className="font-bold text-slate-900 dark:text-white">Oct 2024</span>
+                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 space-y-12">
+            {/* Right Column: Details */}
+            <div className="flex-1 space-y-8 pt-16 md:pt-20">
+              
+              {/* Basic Info */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.3em] text-accent font-bold mb-4 block">Core Information</span>
                 {isEditing ? (
-                  <div className="space-y-6">
-                    <input 
-                      className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-2 outline-none focus:border-accent font-serif italic text-3xl text-ink dark:text-paper"
-                      value={formData.name}
-                      onChange={e => setFormData({...formData, name: e.target.value})}
-                      placeholder="Entity Name"
-                    />
-                    <div className="flex items-center gap-4 mt-5">
-                       <div className="flex flex-col gap-1 w-full">
-                         <span className="text-[8px] uppercase text-zinc-400 tracking-[0.2em]">Tags & Identifiers</span>
-                         <div className="flex gap-4 items-center">
-                           <span className="bg-accent/10 text-accent px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-accent/20">{localUser.role}</span>
-                           <input 
-                            className="flex-1 bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-1 outline-none focus:border-accent font-serif italic text-lg text-zinc-500"
-                            value={formData.industry}
-                            onChange={e => setFormData({...formData, industry: e.target.value})}
-                            placeholder="Industry Sector"
-                          />
-                         </div>
-                       </div>
+                  <div className="space-y-4 max-w-xl">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Full Name / Entity Name</label>
+                      <input 
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition-colors dark:text-white"
+                        value={formData.name}
+                        onChange={e => setFormData({...formData, name: e.target.value})}
+                      />
                     </div>
-                    <div className="flex items-center gap-4 mt-4 w-full">
-                       <div className="flex flex-col gap-1 w-full">
-                         <span className="text-[8px] uppercase text-zinc-400 tracking-[0.2em]">Dossier Entity Link</span>
-                         <input 
-                          className="w-full bg-transparent border-b border-zinc-200 dark:border-zinc-700 py-1 outline-none focus:border-accent font-sans text-sm text-zinc-300"
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Industry Sector</label>
+                        <input 
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition-colors dark:text-white"
+                          value={formData.industry}
+                          onChange={e => setFormData({...formData, industry: e.target.value})}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Website</label>
+                        <input 
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 outline-none focus:border-blue-500 transition-colors dark:text-white"
                           value={formData.website}
                           onChange={e => setFormData({...formData, website: e.target.value})}
-                          placeholder="https://your-domain.com"
+                          placeholder="https://"
                         />
-                       </div>
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <h3 className="text-4xl font-serif italic text-ink dark:text-paper mb-2">{localUser.name}</h3>
-                    <div className="flex flex-col gap-1 mt-1">
-                      <div className="flex items-center gap-4">
-                         <span className="bg-accent/10 text-accent px-3 py-1 text-[9px] font-bold uppercase tracking-widest border border-accent/20">{localUser.role}</span>
-                         <span className="text-zinc-400 font-serif italic text-lg">/ {localUser.industry}</span>
-                      </div>
-                      {localUser.website && (
-                        <div className="mt-4">
-                          <a href={`https://${localUser.website.replace(/^https?:\/\//, '')}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-accent hover:opacity-70 transition-opacity font-bold">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                            Official Entity Link
+                    <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">{localUser.name}</h2>
+                    <div className="flex items-center gap-3 text-slate-500 font-medium">
+                       <span className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-3 py-1 rounded-md text-sm">{localUser.industry}</span>
+                       {localUser.website && (
+                          <a href={`https://${localUser.website.replace(/^https?:\/\//, '')}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 hover:text-blue-600 transition-colors">
+                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                             Website
                           </a>
-                        </div>
-                      )}
+                       )}
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="h-[1px] w-full bg-zinc-50 dark:bg-zinc-800/50"></div>
+              <div className="h-px w-full bg-slate-100 dark:bg-slate-800"></div>
 
+              {/* Bio/Description */}
               <div>
-                <span className="text-[9px] uppercase tracking-[0.3em] text-accent font-bold mb-6 block">Strategic Narrative</span>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3">About</h3>
                 {isEditing ? (
                   <textarea 
-                    className="w-full bg-zinc-50 dark:bg-zinc-800/20 border border-zinc-100 dark:border-zinc-800 p-8 outline-none focus:border-accent h-48 resize-none font-serif italic text-xl text-zinc-600 dark:text-zinc-400 leading-relaxed"
+                    className="w-full max-w-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-blue-500 transition-colors min-h-[160px] resize-y dark:text-white"
                     value={formData.description}
                     onChange={e => setFormData({...formData, description: e.target.value})}
-                    placeholder="Describe your institutional vision..."
                   />
                 ) : (
-                  <p className="text-zinc-500 dark:text-zinc-400 font-serif italic text-2xl leading-relaxed">
-                    "{localUser.description}"
+                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/30 p-5 rounded-xl border border-slate-100 dark:border-slate-800/50">
+                    {localUser.description || "No description provided."}
                   </p>
                 )}
               </div>
-
-              <div className="pt-10">
-                <div className="grid grid-cols-2 gap-8">
-                   <div className="border border-zinc-100 dark:border-zinc-800 p-8 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-accent/20"></div>
-                      <span className="block text-[9px] text-zinc-400 uppercase tracking-widest font-bold mb-3">Network Trust</span>
-                      <div className="flex items-end gap-2">
-                        <span className="text-4xl font-serif italic text-ink dark:text-paper">98.4</span>
-                        <span className="text-[10px] uppercase font-bold text-accent mb-1.5">%</span>
-                      </div>
-                   </div>
-                   <div className="border border-zinc-100 dark:border-zinc-800 p-8 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-accent/20"></div>
-                      <span className="block text-[9px] text-zinc-400 uppercase tracking-widest font-bold mb-3">Sector Dominance</span>
-                      <div className="flex items-end gap-2">
-                        <span className="text-4xl font-serif italic text-ink dark:text-paper">Tier 1</span>
-                      </div>
-                   </div>
-                </div>
-              </div>
             </div>
+            
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// B.I.R.D — Business Intelligence & Resource Development
+// Prisma Schema v2 — Full relational design
 
 generator client {
   provider = "prisma-client-js"
@@ -11,80 +11,100 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
+  id            String   @id @default(uuid())
+  email         String   @unique
   password      String
   name          String
-  role          String    // 'FOUNDER', 'INVESTOR', 'ADMIN'
+  role          String   // 'FOUNDER' | 'INVESTOR' | 'ADMIN'
   industry      String?
+  stage         String?  // For startups: Pre-Seed, Seed, Series A, etc.
+  location      String?
+  targetRaise   Int?     // In Crores — for matching algorithm
+  minCheckSize  Int?     // For investors — min ticket in Crores
+  maxCheckSize  Int?     // For investors — max ticket in Crores
   description   String?
   avatar        String?
   website       String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  followerCount Int      @default(0)
+  teamSize      Int      @default(1)
+  foundedYear   Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  posts         Post[]
-  likes         Like[]
-  comments      Comment[]
-  followers     Follow[]  @relation("Follower")
-  following     Follow[]  @relation("Following")
+  posts                Post[]
+  likes                Like[]
+  comments             Comment[]
+  followers            Follow[]       @relation("Follower")
+  following            Follow[]       @relation("Following")
+  sentConnections      Connection[]   @relation("SentConnections")
+  receivedConnections  Connection[]   @relation("ReceivedConnections")
+  notifications        Notification[] @relation("NotificationReceiver")
+  analyticsEvents      AnalyticsEvent[]
 }
 
 model Company {
-  id            String    @id @default(uuid())
-  name          String    @unique
+  id            String   @id @default(uuid())
+  name          String   @unique
   industry      String
+  stage         String?  // Pre-Seed, Seed, Series A, Series B
+  location      String
+  targetRaise   Int?     // In Crores
   description   String
-  location      String    // e.g., 'Bengaluru', 'Chennai'
   avatar        String?
-  website       String    // Official website for verification
-  linkedinUrl   String?   // LinkedIn for verification
-  isPublicEntity Boolean  @default(true)
-  createdAt     DateTime  @default(now())
+  website       String
+  linkedinUrl   String?
+  isPublicEntity Boolean @default(true)
+  teamSize      Int      @default(10)
+  foundedYear   Int?
+  createdAt     DateTime @default(now())
 
-  posts         Post[]    @relation("CompanyReference")
+  posts         Post[]   @relation("CompanyReference")
 }
 
 model Investor {
-  id            String    @id @default(uuid())
-  name          String    @unique
+  id            String   @id @default(uuid())
+  name          String   @unique
   description   String
-  location      String    // e.g., 'Bengaluru', 'Mumbai'
+  location      String
+  minCheckSize  Int?     // In Crores
+  maxCheckSize  Int?     // In Crores
+  targetSectors String?  // Comma-separated: "Fintech,SaaS,HealthTech"
   avatar        String?
-  website       String    // Official website for verification
-  linkedinUrl   String?   // LinkedIn for verification
-  isPublicEntity Boolean  @default(true)
-  createdAt     DateTime  @default(now())
+  website       String
+  linkedinUrl   String?
+  isPublicEntity Boolean @default(true)
+  createdAt     DateTime @default(now())
 
-  posts         Post[]    @relation("InvestorReference")
+  posts         Post[]   @relation("InvestorReference")
 }
 
 model Post {
-  id            String    @id @default(uuid())
+  id            String   @id @default(uuid())
   content       String
+  tag           String   @default("Update")
+  metric        String?
+  metricLabel   String?
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  authorId      String
-  author        User      @relation(fields: [authorId], references: [id])
-
-  referencedCompanyId  String?
-  referencedCompany    Company? @relation("CompanyReference", fields: [referencedCompanyId], references: [id])
-
-  referencedInvestorId String?
-  referencedInvestor   Investor? @relation("InvestorReference", fields: [referencedInvestorId], references: [id])
+  authorId               String
+  author                 User      @relation(fields: [authorId], references: [id])
+  referencedCompanyId    String?
+  referencedCompany      Company?  @relation("CompanyReference", fields: [referencedCompanyId], references: [id])
+  referencedInvestorId   String?
+  referencedInvestor     Investor? @relation("InvestorReference", fields: [referencedInvestorId], references: [id])
 
   likes         Like[]
   comments      Comment[]
 }
 
 model Like {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   userId    String
   postId    String
-  user      User     @relation(fields: [userId], references: [id])
-  post      Post     @relation(fields: [postId], references: [id])
+  user      User   @relation(fields: [userId], references: [id])
+  post      Post   @relation(fields: [postId], references: [id])
 
   @@unique([userId, postId])
 }
@@ -100,11 +120,51 @@ model Comment {
 }
 
 model Follow {
-  id            String   @id @default(uuid())
-  followerId    String
-  followingId   String
-  follower      User     @relation("Follower", fields: [followerId], references: [id])
-  following     User     @relation("Following", fields: [followingId], references: [id])
+  id          String @id @default(uuid())
+  followerId  String
+  followingId String
+  follower    User   @relation("Follower",  fields: [followerId],  references: [id])
+  following   User   @relation("Following", fields: [followingId], references: [id])
 
   @@unique([followerId, followingId])
+}
+
+// Real persisted connections table — replaces in-memory array
+model Connection {
+  id          String   @id @default(uuid())
+  requesterId String
+  receiverId  String
+  status      String   @default("PENDING")  // PENDING | ACCEPTED | REJECTED
+  matchScore  Int?     // 0-100 from the B.I.R.D matching engine
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester   User @relation("SentConnections",      fields: [requesterId], references: [id])
+  receiver    User @relation("ReceivedConnections",   fields: [receiverId],  references: [id])
+
+  @@unique([requesterId, receiverId])
+}
+
+// Platform notifications
+model Notification {
+  id          String   @id @default(uuid())
+  receiverId  String
+  type        String   // CONNECTION_REQUEST | CONNECTION_ACCEPTED | NEW_POST | NEW_LIKE
+  message     String
+  isRead      Boolean  @default(false)
+  referenceId String?  // postId, connectionId, etc.
+  createdAt   DateTime @default(now())
+
+  receiver    User @relation("NotificationReceiver", fields: [receiverId], references: [id])
+}
+
+// Analytics event log — drives dashboard numbers
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  eventType String   // PROFILE_VIEW | POST_IMPRESSION | MATCH_COMPUTED | CONNECTION_SENT
+  targetId  String?  // who was viewed / which entity
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
 }

@@ -5,8 +5,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-    --font-family-sans: 'Plus Jakarta Sans', sans-serif;
-    --font-family-serif: 'Playfair Display', serif;
+    --font-family-sans: 'Inter', system-ui, sans-serif;
+    --font-family-serif: 'Inter', system-ui, sans-serif;
 
     --color-primary-50: #eff6ff;
     --color-primary-100: #dbeafe;
@@ -24,7 +24,7 @@
     --color-accent-light: #3b82f6;
     --color-accent-dark: #1d4ed8;
 
-    --color-secondary: #F1F5F9;
+    --color-secondary: #F8FAFC;
 
     --color-paper: #FFFFFF;
     --color-ink: #0F172A;
@@ -32,15 +32,15 @@
 
 /* ── Global typography defaults ─────────────────────────── */
 body {
-    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: -0.01em;
+    color: var(--color-ink);
 }
 
 h1, h2, h3, h4 {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Inter', sans-serif;
     letter-spacing: -0.02em;
-    line-height: 1.15;
+    line-height: 1.2;
 }

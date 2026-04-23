@@ -8,7 +8,7 @@ const getAuthHeader = () => {
 };
 
 export const apiService = {
-  // Auth
+  // ── Auth ─────────────────────────────────────────────────────────────────
   async login(credentials: any) {
     const response = await axios.post(`${API_URL}/auth/login`, credentials);
     if (response.data.token) {
@@ -30,7 +30,7 @@ export const apiService = {
     return response.data;
   },
 
-  // Posts
+  // ── Posts / Feed ─────────────────────────────────────────────────────────
   async getFeed(page = 1, limit = 10) {
     const response = await axios.get(`${API_URL}/posts/feed`, {
       params: { page, limit },
@@ -39,7 +39,7 @@ export const apiService = {
     return response.data;
   },
 
-  async createPost(data: any) {
+  async createPost(data: { content: string; tag?: string; metric?: string; metricLabel?: string; image?: string }) {
     const response = await axios.post(`${API_URL}/posts`, data, { headers: getAuthHeader() });
     return response.data;
   },
@@ -54,7 +54,49 @@ export const apiService = {
     return response.data;
   },
 
-  // Entities
+  // ── Matches (B.I.R.D Engine) ─────────────────────────────────────────────
+  async getMatches(filters?: { sector?: string; stage?: string; location?: string }) {
+    const response = await axios.get(`${API_URL}/matches`, {
+      params: filters,
+      headers: getAuthHeader(),
+    });
+    return response.data; // { matches: [...], total: n }
+  },
+
+  // ── Connections ──────────────────────────────────────────────────────────
+  async sendConnection(receiverId: string) {
+    const response = await axios.post(`${API_URL}/connections`, { receiverId }, { headers: getAuthHeader() });
+    return response.data;
+  },
+
+  async getMyConnections() {
+    const response = await axios.get(`${API_URL}/connections`, { headers: getAuthHeader() });
+    return response.data; // { sent: [...], received: [...] }
+  },
+
+  async updateConnectionStatus(connectionId: string, status: 'ACCEPTED' | 'REJECTED') {
+    const response = await axios.patch(`${API_URL}/connections/${connectionId}`, { status }, { headers: getAuthHeader() });
+    return response.data;
+  },
+
+  // ── Analytics ────────────────────────────────────────────────────────────
+  async getAnalyticsSummary() {
+    const response = await axios.get(`${API_URL}/analytics/summary`, { headers: getAuthHeader() });
+    return response.data; // { platform: {...}, user: {...} }
+  },
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  async getNotifications() {
+    const response = await axios.get(`${API_URL}/notifications`, { headers: getAuthHeader() });
+    return response.data; // { notifications: [...], unreadCount: n }
+  },
+
+  async markNotificationRead(notificationId: string) {
+    const response = await axios.patch(`${API_URL}/notifications/${notificationId}/read`, {}, { headers: getAuthHeader() });
+    return response.data;
+  },
+
+  // ── Legacy compatibility (Discover page uses these) ───────────────────────
   async getCompanies() {
     const response = await axios.get(`${API_URL}/users/companies`, { headers: getAuthHeader() });
     return response.data;
@@ -73,5 +115,5 @@ export const apiService = {
   async updateProfile(data: any) {
     const response = await axios.put(`${API_URL}/users/profile`, data, { headers: getAuthHeader() });
     return response.data;
-  }
+  },
 };
