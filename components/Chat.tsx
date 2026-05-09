@@ -14,8 +14,15 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isTyping, setIsTyping] = useState<Record<string, boolean>>({});
+  
+  // Call Feature State
+  const [activeCall, setActiveCall] = useState<'audio' | 'video' | null>(null);
+  const [callStatus, setCallStatus] = useState<'ringing' | 'connected'>('ringing');
+  const [callDuration, setCallDuration] = useState(0);
+
   const socketRef = useRef<Socket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const [contactsState, setContactsState] = useState([
     { id: 'c1', name: 'Alice from Helix Capital', avatar: 'https://picsum.photos/seed/alice/100', lastMsg: "We loved your pitch!", online: true, status: 'APPROVED' },
@@ -51,6 +58,41 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [selectedContact, chatHistory]);
+
+  // Call Logic Effects
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (activeCall && callStatus === 'ringing') {
+      timer = setTimeout(() => setCallStatus('connected'), 3000);
+    } else if (activeCall && callStatus === 'connected') {
+      timer = setInterval(() => setCallDuration(d => d + 1), 1000);
+    }
+    return () => { clearTimeout(timer); clearInterval(timer); };
+  }, [activeCall, callStatus]);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    if (activeCall === 'video' && callStatus === 'connected' && videoRef.current) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(s => {
+          stream = s;
+          if (videoRef.current) {
+            videoRef.current.srcObject = s;
+            videoRef.current.play().catch(e => console.error("Video play error", e));
+          }
+        })
+        .catch(err => console.log("Camera access denied or unavailable", err));
+    }
+    return () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
+  }, [activeCall, callStatus]);
+
+  const endCall = () => {
+    setActiveCall(null);
+    setCallStatus('ringing');
+    setCallDuration(0);
+  };
 
   const handleSendMessage = (e?: React.FormEvent | React.KeyboardEvent) => {
     if (e) e.preventDefault();
@@ -113,6 +155,12 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden flex h-[75vh]">
       {/* Contact List */}
@@ -168,7 +216,7 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
       </div>
 
       {/* Message Area */}
-      <div className="flex-1 flex flex-col bg-white dark:bg-[#0f172a]">
+      <div className="flex-1 flex flex-col bg-white dark:bg-[#0f172a] relative">
         {selectedContact ? (
           <>
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-[#0f172a]">
@@ -192,10 +240,64 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></button>
-                <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
+                <button onClick={() => setActiveCall('audio')} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="Voice Call"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></button>
+                <button onClick={() => setActiveCall('video')} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="Video Call"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg></button>
               </div>
             </div>
+
+            {/* Call Overlay */}
+            {activeCall && (
+              <div className="absolute inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center text-white overflow-hidden rounded-r-2xl">
+                {activeCall === 'video' && callStatus === 'connected' ? (
+                  <>
+                    {/* Remote Video (Simulated using their avatar as a placeholder if no real remote stream) */}
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+                      <img src={selectedContact.avatar} alt="Remote" className="w-full h-full object-cover opacity-40 blur-sm" />
+                      <div className="absolute flex flex-col items-center">
+                        <img src={selectedContact.avatar} alt="Remote Profile" className="w-32 h-32 rounded-full border-4 border-slate-700 shadow-2xl mb-4" />
+                        <h2 className="text-2xl font-bold">{selectedContact.name}</h2>
+                        <p className="text-blue-400 font-medium mt-2">{formatDuration(callDuration)}</p>
+                      </div>
+                    </div>
+                    {/* Local Webcam Feed */}
+                    <div className="absolute bottom-6 right-6 w-48 h-64 bg-black rounded-xl overflow-hidden border-2 border-slate-600 shadow-2xl">
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center z-10">
+                    <div className="relative mb-8">
+                      <img src={selectedContact.avatar} alt={selectedContact.name} className="w-32 h-32 rounded-full border-4 border-slate-700 z-10 relative shadow-2xl" />
+                      {callStatus === 'ringing' && (
+                        <>
+                          <div className="absolute inset-0 rounded-full border-4 border-blue-500 animate-ping opacity-75"></div>
+                          <div className="absolute -inset-4 rounded-full border-2 border-blue-400 animate-ping opacity-50" style={{ animationDelay: '0.5s' }}></div>
+                        </>
+                      )}
+                    </div>
+                    <h2 className="text-3xl font-bold mb-2">{selectedContact.name}</h2>
+                    <p className="text-slate-400 mb-12">
+                      {callStatus === 'ringing' ? 'Calling...' : formatDuration(callDuration)}
+                    </p>
+                  </div>
+                )}
+
+                {/* Call Controls */}
+                <div className="absolute bottom-10 flex items-center gap-6 z-10 bg-slate-900/80 px-8 py-4 rounded-full backdrop-blur-md border border-slate-700">
+                  <button className="w-14 h-14 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                  </button>
+                  {activeCall === 'video' && (
+                    <button className="w-14 h-14 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    </button>
+                  )}
+                  <button onClick={endCall} className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center transition-colors shadow-lg shadow-red-600/30">
+                    <svg className="w-6 h-6 transform rotate-[135deg]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div ref={scrollRef} className="flex-1 p-6 space-y-6 overflow-y-auto bg-slate-50/50 dark:bg-[#0b1120]/50">
               {filteredMessages.length === 0 && (
@@ -281,7 +383,7 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
             )}
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-20 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-20 text-center relative z-0">
             <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 shadow-inner">
               <svg className="w-10 h-10 text-slate-300 dark:text-slate-600" fill="currentColor" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" /></svg>
             </div>
