@@ -1,5 +1,6 @@
 import prisma from '../prismaClient.js';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 export const seedDatabase = async () => {
   try {
@@ -320,6 +321,23 @@ export const seedDatabase = async () => {
     }
 
     // ── Demo Users ────────────────────────────────────────────────────────────
+    // SECURITY: demo accounts ship with publicly-known passwords. They are
+    // only seeded outside production. In production set SEED_DEMO_USERS=true
+    // explicitly if you really want them (never for a public deployment).
+    const isProd = process.env.NODE_ENV === 'production';
+    const seedDemoUsers = !isProd || process.env.SEED_DEMO_USERS === 'true';
+
+    // SECURITY: the admin password is no longer a hardcoded "admin2025" —
+    // anyone with source access could previously log in as ADMIN on the live
+    // site. It now comes from the ADMIN_PASSWORD env var; if unset, a random
+    // one is generated and printed to the server logs exactly once.
+    const adminPassword =
+      process.env.ADMIN_PASSWORD ||
+      crypto.randomBytes(18).toString('base64url');
+    if (!process.env.ADMIN_PASSWORD) {
+      console.log(`[SECURITY] ADMIN_PASSWORD not set — generated one-time admin password: ${adminPassword}`);
+    }
+    const adminHashedPw = await bcrypt.hash(adminPassword, 10);
     const hashedPw = await bcrypt.hash('password123', 10);
 
     const demoUsers = [
@@ -355,9 +373,29 @@ export const seedDatabase = async () => {
         avatar:
           'https://api.dicebear.com/7.x/initials/svg?seed=KR&backgroundColor=fce7f3&textColor=9d174d',
       },
-      {
+    ];
+
+    if (seedDemoUsers) {
+      for (const u of demoUsers) {
+        await prisma.user.upsert({
+          where: { email: u.email },
+          update: {},
+          create: u,
+        });
+      }
+    } else {
+      console.log('Production mode: demo founder/investor accounts NOT seeded.');
+    }
+
+    // Admin is always seeded, but its password is env-driven/random — and we
+    // rotate it on every boot so a previously committed password can never
+    // keep working.
+    await prisma.user.upsert({
+      where: { email: 'admin@bird.ai' },
+      update: { password: adminHashedPw },
+      create: {
         email: 'admin@bird.ai',
-        password: await bcrypt.hash('admin2025', 10),
+        password: adminHashedPw,
         name: 'B.I.R.D Admin',
         role: 'ADMIN',
         industry: 'Technology',
@@ -366,15 +404,7 @@ export const seedDatabase = async () => {
         avatar:
           'https://api.dicebear.com/7.x/initials/svg?seed=BA&backgroundColor=f1f5f9&textColor=0f172a',
       },
-    ];
-
-    for (const u of demoUsers) {
-      await prisma.user.upsert({
-        where: { email: u.email },
-        update: {},
-        create: u,
-      });
-    }
+    });
 
     // ── Demo Posts ────────────────────────────────────────────────────────────
     const founderUser = await prisma.user.findUnique({ where: { email: 'founder@bird.ai' } });
@@ -422,10 +452,13 @@ export const seedDatabase = async () => {
       }
     }
 
-    console.log('B.I.R.D seeding complete. Demo credentials:');
-    console.log('  Founder  → founder@bird.ai / password123');
-    console.log('  Investor → investor@bird.ai / password123');
-    console.log('  Admin    → admin@bird.ai / admin2025');
+    console.log('B.I.R.D seeding complete.');
+    if (seedDemoUsers) {
+      console.log('  Demo credentials (dev only):');
+      console.log('    Founder  → founder@bird.ai / password123');
+      console.log('    Investor → investor@bird.ai / password123');
+    }
+    console.log('  Admin    → admin@bird.ai / (ADMIN_PASSWORD env var, or the generated value above)');
   } catch (error) {
     console.error('Seed error:', error);
   }

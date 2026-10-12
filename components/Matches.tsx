@@ -35,6 +35,18 @@ const scoreBadge = (score: number): string => {
   return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
 };
 
+// SECURITY: only render outbound links with real http(s) URLs — a stored
+// `javascript:`/`data:` URL would otherwise execute in our origin on click.
+const safeExternalUrl = (url?: string): string | undefined => {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   const radius = 28;
   const circumference = 2 * Math.PI * radius;
@@ -363,15 +375,15 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
                 >
                   {isSent(activeProfile.id) ? sentLabel : actionLabel}
                 </button>
-                {activeProfile.website && (
-                  <a href={activeProfile.website} target="_blank" rel="noopener noreferrer"
+                {safeExternalUrl(activeProfile.website) && (
+                  <a href={safeExternalUrl(activeProfile.website)} target="_blank" rel="noopener noreferrer"
                     className="px-4 py-3 rounded-xl font-semibold text-sm border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                     Website
                   </a>
                 )}
-                {activeProfile.linkedinUrl && (
-                  <a href={activeProfile.linkedinUrl} target="_blank" rel="noopener noreferrer"
+                {safeExternalUrl(activeProfile.linkedinUrl) && (
+                  <a href={safeExternalUrl(activeProfile.linkedinUrl)} target="_blank" rel="noopener noreferrer"
                     className="px-4 py-3 rounded-xl font-semibold text-sm border border-slate-200 dark:border-slate-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center gap-2">
                     in
                   </a>

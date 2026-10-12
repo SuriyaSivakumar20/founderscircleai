@@ -3,14 +3,15 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import prisma from '../prismaClient.js';
 import { z } from 'zod';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+import { getJwtSecret } from '../config/security.js';
 
 const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
   name: z.string().min(2),
-  role: z.enum(['FOUNDER', 'INVESTOR', 'ADMIN']),
+  // SECURITY: public self-registration can never mint an ADMIN account.
+  // Admin accounts are created only through the seed/admin tooling.
+  role: z.enum(['FOUNDER', 'INVESTOR']),
   industry: z.string().optional(),
   description: z.string().optional(),
   avatar: z.string().optional(),
@@ -39,7 +40,7 @@ export const register = async (req: Request, res: Response) => {
       },
     });
 
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id }, getJwtSecret(), { expiresIn: '7d' });
 
     const { password, ...userWithoutPassword } = user;
     res.status(201).json({ user: userWithoutPassword, token });
@@ -56,29 +57,16 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
-    // Vercel Presentation Fallback: Hardcode the demo user so it ALWAYS works, even if DB fails to seed
-    if (email === 'testing@test.com' && password === 'password') {
-      const demoToken = jwt.sign({ id: 'demo-admin-id' }, JWT_SECRET, { expiresIn: '7d' });
-      return res.json({
-        user: {
-          id: 'demo-admin-id',
-          email: 'testing@test.com',
-          name: 'FoundersCircle Admin',
-          role: 'ADMIN',
-          industry: 'Technology',
-          description: 'Official administrator for the FoundersCircle platform.',
-          avatar: 'https://picsum.photos/seed/admin/200',
-        },
-        token: demoToken
-      });
-    }
+    // SECURITY: the hardcoded demo-admin login ("testing@test.com" / "password")
+    // that granted a permanent ADMIN token has been removed — it was a
+    // full authentication bypass readable by anyone with source access.
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id }, getJwtSecret(), { expiresIn: '7d' });
 
     const { password: _, ...userWithoutPassword } = user;
     res.json({ user: userWithoutPassword, token });

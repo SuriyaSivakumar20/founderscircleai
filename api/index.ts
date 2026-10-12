@@ -16,13 +16,26 @@ import matchRoutes from '../backend/routes/matchRoutes.js';
 import connectionRoutes from '../backend/routes/connectionRoutes.js';
 import analyticsRoutes from '../backend/routes/analyticsRoutes.js';
 import notificationRoutes from '../backend/routes/notificationRoutes.js';
+import {
+  corsOriginVerifier,
+  rateLimit,
+  securityHeaders,
+} from '../backend/config/security.js';
+import { sanitizeInteraction, sanitizeRole } from '../backend/utils/aiInput.js';
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+// SECURITY: origin was "*" — any origin could call the API with a user's token.
+app.use(cors({ origin: corsOriginVerifier }));
+app.use(securityHeaders);
+app.use(express.json({ limit: "1mb" }));
+app.disable("x-powered-by");
+
+// AI endpoints spend real money (Gemini) and are unauthenticated during
+// onboarding, so they are rate-limited per IP to prevent quota theft.
+const aiRateLimiter = rateLimit(20, 60_000);
 
 // ── All API Routes ────────────────────────────────────────────────────────────
 app.use("/api/auth",          authRoutes);
@@ -38,7 +51,6 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     platform: "B.I.R.D — Business Intelligence & Resource Development",
-    env: process.env.NODE_ENV,
     vercel: true,
   });
 });
@@ -54,8 +66,9 @@ const STARTUP_KNOWLEDGE_BASE = `
 [END DATASET]
 `;
 
-app.post("/api/ai/question", async (req, res) => {
-  const { role, previousInteraction } = req.body;
+app.post("/api/ai/question", aiRateLimiter, async (req, res) => {
+  const role = sanitizeRole(req.body?.role);
+  const previousInteraction = sanitizeInteraction(req.body?.previousInteraction);
   try {
     const { GoogleGenAI } = await import("@google/genai");
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
@@ -99,7 +112,7 @@ app.post("/api/ai/question", async (req, res) => {
       "Who are your top 3 competitors and what specifically makes you better?",
       "What will you use the funding for, and what milestones will it unlock?",
     ];
-    const qIdx = Math.min((req.body.previousInteraction || []).length, fallbackQuestions.length - 1);
+    const qIdx = Math.min(previousInteraction.length, fallbackQuestions.length - 1);
     if (!res.headersSent) {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -109,21 +122,13 @@ app.post("/api/ai/question", async (req, res) => {
   }
 });
 
-app.post("/api/ai/evaluate", async (req, res) => {
-  const { role, interaction } = req.body;
+app.post("/api/ai/evaluate", aiRateLimiter, async (req, res) => {
+  const role = sanitizeRole(req.body?.role);
+  const interaction = sanitizeInteraction(req.body?.interaction);
 
-  // Backdoor bypass
-  const lastAnswer = interaction?.length > 0 ? interaction[interaction.length - 1].a?.toLowerCase()?.trim() : "";
-  if (lastAnswer === "founders backdoor bypass") {
-    return res.json({
-      score: 96, scoreLetter: "A",
-      verdict: "Exceptional strategic clarity — direct admission granted.",
-      feedback: "Override credentials accepted.",
-      dimensionScores: { differentiation: 20, competitivePositioning: 19, businessViability: 19, strategyClarity: 20, innovationFactor: 18 },
-      competitors: [], strengths: ["Full strategic clarity"], recommendations: [],
-      admissionStatus: "ADMITTED",
-    });
-  }
+  // SECURITY: the "founders backdoor bypass" magic phrase that returned
+  // score 96 / ADMITTED without any evaluation has been removed.
+  // It was a client-supplied admission bypass.
 
   try {
     const { GoogleGenAI, Type } = await import("@google/genai");

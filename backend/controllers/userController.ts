@@ -1,5 +1,30 @@
 import { Request, Response } from 'express';
 import prisma from '../prismaClient.js';
+import { z } from 'zod';
+
+// SECURITY: user-controlled URLs are rendered as live links elsewhere in the
+// app (Matches, ProfileView). Allowing arbitrary schemes such as
+// `javascript:` or `data:` would enable stored XSS / phishing. Only real
+// http(s) URLs are accepted.
+const safeHttpUrl = z
+  .string()
+  .max(300)
+  .refine(v => {
+    try {
+      const u = new URL(v);
+      return u.protocol === 'https:' || u.protocol === 'http:';
+    } catch {
+      return false;
+    }
+  }, 'Must be a valid http(s) URL');
+
+const updateProfileSchema = z.object({
+  name:        z.string().trim().min(2).max(80).optional(),
+  industry:    z.string().trim().max(80).optional(),
+  description: z.string().trim().max(2000).optional(),
+  avatar:      safeHttpUrl.optional(),
+  website:     safeHttpUrl.optional(),
+});
 
 export const getProfile = async (req: Request, res: Response) => {
   try {
@@ -33,11 +58,17 @@ export const getProfile = async (req: Request, res: Response) => {
 
 export const updateProfile = async (req: any, res: Response) => {
   try {
-    const { name, industry, description, avatar, website } = req.body;
+    // SECURITY: only whitelisted, length-capped, URL-validated fields are
+    // accepted — role/email/password can never be escalated through here.
+    const parsed = updateProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Invalid profile data', errors: parsed.error.issues });
+    }
+    const data = parsed.data;
 
     const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
-      data: { name, industry, description, avatar, website },
+      data,
     });
 
     const { password, ...userWithoutPassword } = updatedUser;

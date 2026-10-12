@@ -27,8 +27,9 @@ dist-ssr
 
 # Environment — NEVER commit secrets
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+*.tmp
 
 # SQLite files — no longer needed (using PostgreSQL)
 *.db

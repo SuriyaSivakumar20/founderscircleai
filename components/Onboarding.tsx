@@ -190,15 +190,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, onAdminBypass }) =>
   };
 
   const handleAdminLogin = () => {
-    if (adminPass === 'admin123') {
-      onAdminBypass({
-        id: 'admin-001', email: 'admin@founderscircle.in', role: 'ADMIN',
-        name: 'System Admin', industry: 'Technology',
-        description: 'Testing account with full access.',
-        avatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Admin&backgroundColor=dbeafe&textColor=1e40af',
-        createdAt: new Date().toISOString(),
-      });
-    } else { alert('Incorrect admin password'); }
+    // SECURITY: the hardcoded client-side admin password ("admin123") that
+    // minted a fake ADMIN session has been removed. Admin access now requires
+    // signing in through the real /login flow, verified server-side.
+    alert('Admin sign-in now requires a real account. Please use the regular login.');
   };
 
   // ── Admin Login ──────────────────────────────

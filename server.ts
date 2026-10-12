@@ -16,6 +16,11 @@ import connectionRoutes from "./backend/routes/connectionRoutes";
 import analyticsRoutes from "./backend/routes/analyticsRoutes";
 import notificationRoutes from "./backend/routes/notificationRoutes";
 import prisma from "./backend/prismaClient";
+import {
+  corsOriginVerifier,
+  rateLimit,
+  securityHeaders,
+} from "./backend/config/security";
 
 dotenv.config();
 
@@ -26,13 +31,24 @@ async function startServer() {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
+    // SECURITY: origin was "*" — any website could open a socket as a user.
+    cors: { origin: corsOriginVerifier, methods: ["GET", "POST"] }
   });
 
   const PORT = 3000;
 
-  app.use(cors());
-  app.use(express.json({ limit: '10mb' }));
+  // SECURITY: origin was "*" — any origin could call the API with a user's token.
+  app.use(cors({ origin: corsOriginVerifier }));
+  app.use(securityHeaders);
+  app.use(express.json({ limit: '1mb' }));
+  app.disable("x-powered-by");
+
+  // AI endpoints spend real money (Gemini) and are unauthenticated during
+  // onboarding, so they are rate-limited per IP to prevent quota theft.
+  const aiRateLimiter = rateLimit(20, 60_000);
+
+  // Caps public AI request bodies (unbounded arrays/strings = token spend).
+  const { sanitizeInteraction, sanitizeRole } = await import("./backend/utils/aiInput");
 
   // Always seed on start (upsert is idempotent)
   await seedDatabase();
@@ -62,8 +78,9 @@ async function startServer() {
 [END DATASET]
 `;
 
-  app.post("/api/ai/question", async (req, res) => {
-    const { role, previousInteraction } = req.body;
+  app.post("/api/ai/question", aiRateLimiter, async (req, res) => {
+    const role = sanitizeRole(req.body?.role);
+    const previousInteraction = sanitizeInteraction(req.body?.previousInteraction);
     try {
       const { GoogleGenAI } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
@@ -106,7 +123,7 @@ async function startServer() {
         "Who are your top 3 competitors and what specifically makes you better?",
         "What will you use the funding for, and what milestones will it unlock?",
       ];
-      const qIdx = Math.min((req.body.previousInteraction || []).length, fallbackQuestions.length - 1);
+      const qIdx = Math.min(previousInteraction.length, fallbackQuestions.length - 1);
       if (!res.headersSent) {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
@@ -116,21 +133,13 @@ async function startServer() {
     }
   });
 
-  app.post("/api/ai/evaluate", async (req, res) => {
-    const { role, interaction } = req.body;
+  app.post("/api/ai/evaluate", aiRateLimiter, async (req, res) => {
+    const role = sanitizeRole(req.body?.role);
+    const interaction = sanitizeInteraction(req.body?.interaction);
 
-    // Backdoor bypass
-    const lastAnswer = interaction?.length > 0 ? interaction[interaction.length - 1].a?.toLowerCase()?.trim() : '';
-    if (lastAnswer === 'founders backdoor bypass') {
-      return res.json({
-        score: 96, scoreLetter: 'A',
-        verdict: 'Exceptional strategic clarity — direct admission granted.',
-        feedback: 'Override credentials accepted.',
-        dimensionScores: { differentiation: 20, competitivePositioning: 19, businessViability: 19, strategyClarity: 20, innovationFactor: 18 },
-        competitors: [], strengths: ['Full strategic clarity'], recommendations: [],
-        admissionStatus: 'ADMITTED',
-      });
-    }
+    // SECURITY: the "founders backdoor bypass" magic phrase that returned
+    // score 96 / ADMITTED without any evaluation has been removed.
+    // It was a client-supplied admission bypass.
 
     try {
       const { GoogleGenAI, Type } = await import("@google/genai");
@@ -209,26 +218,50 @@ async function startServer() {
   // ── Socket.IO ─────────────────────────────────────────────────────────────
   const activeUsers = new Map<string, string>(); // userId → socketId
 
+  // SECURITY: the client must prove its identity via the same JWT used for the
+  // REST API. Previously the server trusted a client-supplied `senderId`, so any
+  // anonymous connection could impersonate any user.
+  const jwt = await import("jsonwebtoken");
+  const { getJwtSecret } = await import("./backend/config/security");
+
+  io.use((socket, next) => {
+    const token =
+      (socket.handshake.auth?.token as string) ||
+      (socket.handshake.headers.authorization || "").replace(/^Bearer /i, "");
+    if (!token) return next(new Error("Unauthorized — no token provided"));
+    try {
+      const decoded = jwt.verify(token, getJwtSecret()) as { id: string };
+      (socket.data as any).userId = decoded.id;
+      next();
+    } catch {
+      next(new Error("Invalid or expired token"));
+    }
+  });
+
   io.on("connection", (socket) => {
-    socket.on("register", (userId: string) => {
-      activeUsers.set(userId, socket.id);
+    const authUserId = (socket.data as any).userId as string;
+
+    socket.on("register", () => {
+      activeUsers.set(authUserId, socket.id);
     });
 
-    socket.on("send_message", (data: { senderId: string; receiverId: string; text: string }) => {
+    socket.on("send_message", (data: { receiverId: string; text: string }) => {
+      // senderId is taken from the verified token, never from the payload.
+      if (typeof data?.receiverId !== "string" || !data.receiverId) return;
       const msg = {
         id: Math.random().toString(36).substr(2, 9),
-        ...data,
+        senderId: authUserId,
+        receiverId: data.receiverId,
+        text: typeof data?.text === "string" ? data.text.slice(0, 5000) : "",
         timestamp: Date.now(),
       };
-      const receiverSocketId = activeUsers.get(data.receiverId);
+      const receiverSocketId = activeUsers.get(msg.receiverId);
       if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", msg);
       socket.emit("receive_message", msg);
     });
 
     socket.on("disconnect", () => {
-      for (const [uid, sid] of activeUsers.entries()) {
-        if (sid === socket.id) { activeUsers.delete(uid); break; }
-      }
+      if (activeUsers.get(authUserId) === socket.id) activeUsers.delete(authUserId);
     });
   });
 
@@ -248,7 +281,9 @@ async function startServer() {
         res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
       } catch (e: any) {
         vite.ssrFixStacktrace(e);
-        res.status(500).end(e.stack);
+        // SECURITY: never echo stack traces to the client (information leak)
+        console.error("SSR render error:", e);
+        res.status(500).end("Internal Server Error");
       }
     });
   } else {

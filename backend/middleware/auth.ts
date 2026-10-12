@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../prismaClient.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'founderscircle-jwt-secret-2025';
+import { getJwtSecret } from '../config/security.js';
 
 export const authenticate = async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -13,7 +12,7 @@ export const authenticate = async (req: any, res: Response, next: NextFunction) 
 
     const token = authHeader.split(' ')[1];
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string };
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },

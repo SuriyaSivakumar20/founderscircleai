@@ -30,12 +30,21 @@ const AppRoutes: React.FC = () => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Check for guest bypass in sessionStorage first
+      // Check for guest bypass in sessionStorage first.
+      // SECURITY: sessionStorage is attacker-writable (e.g. via devtools or an
+      // XSS sink), so only accept the exact known guest identity — a forged
+      // payload with role:'ADMIN' or a real user's id must be discarded.
       const guestData = sessionStorage.getItem('fc_guest_user');
       if (guestData) {
-        setUser(JSON.parse(guestData));
-        setAuthChecked(true);
-        return;
+        try {
+          const guest = JSON.parse(guestData);
+          if (guest?.id === 'guest-bypass-001' && guest?.role === 'FOUNDER') {
+            setUser(guest as User);
+            setAuthChecked(true);
+            return;
+          }
+        } catch { /* fall through to token auth */ }
+        sessionStorage.removeItem('fc_guest_user');
       }
 
       const token = localStorage.getItem('founders_circle_token');

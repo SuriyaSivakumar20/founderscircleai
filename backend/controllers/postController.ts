@@ -3,13 +3,28 @@ import prisma from '../prismaClient.js';
 import { z } from 'zod';
 
 const postSchema = z.object({
-  content: z.string().min(1, 'Content cannot be empty'),
-  tag: z.string().optional().default('Update'),
-  metric: z.string().optional(),
-  metricLabel: z.string().optional(),
-  image: z.string().optional(),
-  referencedCompanyId: z.string().optional(),
-  referencedInvestorId: z.string().optional(),
+  content: z.string().min(1, 'Content cannot be empty').max(5000),
+  tag: z.string().max(40).optional().default('Update'),
+  metric: z.string().max(40).optional(),
+  metricLabel: z.string().max(40).optional(),
+  // SECURITY: image is rendered directly in an <img src>. Accept only real
+  // http(s) URLs or inline data: images — anything else could be a stored
+  // XSS / phishing vector.
+  image: z
+    .string()
+    .max(2_000_000)
+    .refine(v => {
+      if (v.startsWith('data:image/')) return true;
+      try {
+        const u = new URL(v);
+        return u.protocol === 'https:' || u.protocol === 'http:';
+      } catch {
+        return false;
+      }
+    }, 'Image must be an http(s) URL or an inline image')
+    .optional(),
+  referencedCompanyId: z.string().max(64).optional(),
+  referencedInvestorId: z.string().max(64).optional(),
 });
 
 export const createPost = async (req: any, res: Response) => {
@@ -131,6 +146,9 @@ export const addComment = async (req: any, res: Response) => {
 
     if (!content?.trim()) {
       return res.status(400).json({ message: 'Comment content is required' });
+    }
+    if (content.length > 2000) {
+      return res.status(400).json({ message: 'Comment is too long (max 2000 characters)' });
     }
     if (userId === 'guest-bypass-001') {
       return res.status(403).json({ message: 'Sign up to comment' });
