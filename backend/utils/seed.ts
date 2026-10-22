@@ -373,6 +373,26 @@ export const seedDatabase = async () => {
         avatar:
           'https://api.dicebear.com/7.x/initials/svg?seed=KR&backgroundColor=fce7f3&textColor=9d174d',
       },
+      {
+        // Real guest account used by the landing page's "Enter the demo"
+        // button (dev/demo deployments only). It is an ordinary user row, so
+        // every dashboard API call is authenticated and truthful — there is
+        // no client-side bypass identity anymore.
+        email: 'guest@bird.ai',
+        password: hashedPw,
+        name: 'Guest Visitor',
+        role: 'FOUNDER',
+        industry: 'SaaS',
+        stage: 'Pre-Seed',
+        location: 'Mumbai, Maharashtra',
+        targetRaise: 5,
+        teamSize: 3,
+        foundedYear: 2025,
+        description:
+          'Exploring the B.I.R.D network in demo mode. Upgrade to a real profile to connect and message members.',
+        avatar:
+          'https://api.dicebear.com/7.x/initials/svg?seed=GV&backgroundColor=f1f5f9&textColor=334155',
+      },
     ];
 
     if (seedDemoUsers) {
@@ -447,6 +467,25 @@ export const seedDatabase = async () => {
             metric: '₹5–20 Cr',
             metricLabel: 'Ticket Size',
             authorId: investorUser.id,
+          },
+        });
+      }
+    }
+
+    // ── Demo Connection (so chat/messaging has real data in dev) ────────────
+    if (seedDemoUsers && founderUser && investorUser) {
+      const existingConnection = await prisma.connection.findUnique({
+        where: {
+          requesterId_receiverId: { requesterId: investorUser.id, receiverId: founderUser.id },
+        },
+      });
+      if (!existingConnection) {
+        await prisma.connection.create({
+          data: {
+            requesterId: investorUser.id,
+            receiverId: founderUser.id,
+            status: 'ACCEPTED',
+            matchScore: 88,
           },
         });
       }

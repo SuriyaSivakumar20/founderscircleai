@@ -84,6 +84,30 @@ export const apiService = {
     return response.data;
   },
 
+  // ── Messages (real DB-persisted chat) ────────────────────────────────────
+  async getConversations() {
+    const response = await axios.get(`${API_URL}/messages/conversations`, { headers: getAuthHeader() });
+    return response.data; // { conversations: [{ peer, lastMessage, unreadCount }] }
+  },
+
+  async getMessages(peerId: string, page = 1, limit = 30) {
+    const response = await axios.get(`${API_URL}/messages/${peerId}`, {
+      params: { page, limit },
+      headers: getAuthHeader(),
+    });
+    return response.data; // { messages, total, page, totalPages }
+  },
+
+  async sendChatMessage(receiverId: string, content: string) {
+    const response = await axios.post(`${API_URL}/messages`, { receiverId, content }, { headers: getAuthHeader() });
+    return response.data; // { message }
+  },
+
+  async markConversationRead(peerId: string) {
+    const response = await axios.post(`${API_URL}/messages/${peerId}/read`, {}, { headers: getAuthHeader() });
+    return response.data; // { markedRead }
+  },
+
   // ── Analytics ────────────────────────────────────────────────────────────
   async getAnalyticsSummary() {
     const response = await axios.get(`${API_URL}/analytics/summary`, { headers: getAuthHeader() });
@@ -101,20 +125,20 @@ export const apiService = {
     return response.data;
   },
 
-  // ── Legacy compatibility (Discover page uses these) ───────────────────────
-  async getCompanies() {
-    const response = await axios.get(`${API_URL}/users/companies`, { headers: getAuthHeader() });
-    return response.data;
+  async markAllNotificationsRead() {
+    const response = await axios.post(`${API_URL}/notifications/read-all`, {}, { headers: getAuthHeader() });
+    return response.data; // { markedRead }
   },
 
-  async getInvestors() {
-    const response = await axios.get(`${API_URL}/users/investors`, { headers: getAuthHeader() });
-    return response.data;
-  },
-
+  // ── Users ────────────────────────────────────────────────────────────────
   async getProfile(id: string) {
     const response = await axios.get(`${API_URL}/users/${id}`, { headers: getAuthHeader() });
     return response.data;
+  },
+
+  async searchUsers(q: string) {
+    const response = await axios.get(`${API_URL}/users/search`, { params: { q }, headers: getAuthHeader() });
+    return response.data; // { users: [...] }
   },
 
   async updateProfile(data: any) {

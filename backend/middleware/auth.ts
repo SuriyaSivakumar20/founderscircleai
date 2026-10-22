@@ -33,6 +33,7 @@ export const authenticate = async (req: any, res: Response, next: NextFunction) 
         followerCount: true,
         teamSize: true,
         foundedYear: true,
+        vettingScore: true,
         createdAt: true,
       },
     });
@@ -46,13 +47,4 @@ export const authenticate = async (req: any, res: Response, next: NextFunction) 
   } catch (error) {
     return res.status(401).json({ message: 'Invalid or expired token' });
   }
-};
-
-export const authorize = (roles: string[]) => {
-  return (req: any, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: 'Forbidden — insufficient privileges' });
-    }
-    next();
-  };
 };

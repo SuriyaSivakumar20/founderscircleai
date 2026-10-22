@@ -3,29 +3,31 @@ import prisma from '../prismaClient.js';
 
 /**
  * GET /api/notifications
- * Returns all notifications for the logged-in user, newest first.
+ * Latest 30 notifications plus the TRUE unread count across all rows.
  */
 export const getNotifications = async (req: any, res: Response) => {
   try {
     const receiverId = req.user.id;
 
-    const notifications = await prisma.notification.findMany({
-      where: { receiverId },
-      orderBy: { createdAt: 'desc' },
-      take: 30,
-    });
-
-    const unreadCount = notifications.filter(n => !n.isRead).length;
+    const [notifications, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: { receiverId },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      }),
+      prisma.notification.count({ where: { receiverId, isRead: false } }),
+    ]);
 
     res.json({ notifications, unreadCount });
   } catch (error) {
+    console.error('getNotifications error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 /**
  * PATCH /api/notifications/:id/read
- * Marks a single notification as read.
+ * Marks a single notification as read (scoped to the authenticated receiver).
  */
 export const markRead = async (req: any, res: Response) => {
   try {
@@ -45,6 +47,24 @@ export const markRead = async (req: any, res: Response) => {
     const notification = await prisma.notification.findUnique({ where: { id } });
     res.json({ notification });
   } catch (error) {
+    console.error('markRead error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * POST /api/notifications/read-all
+ * Marks every unread notification of the authenticated user as read.
+ */
+export const markAllRead = async (req: any, res: Response) => {
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { receiverId: req.user.id, isRead: false },
+      data: { isRead: true },
+    });
+    res.json({ markedRead: result.count });
+  } catch (error) {
+    console.error('markAllRead error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

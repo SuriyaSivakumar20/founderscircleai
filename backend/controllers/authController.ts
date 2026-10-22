@@ -12,10 +12,16 @@ const registerSchema = z.object({
   // SECURITY: public self-registration can never mint an ADMIN account.
   // Admin accounts are created only through the seed/admin tooling.
   role: z.enum(['FOUNDER', 'INVESTOR']),
-  industry: z.string().optional(),
+  industry: z.string().max(80).optional(),
+  location: z.string().max(80).optional(),
   description: z.string().optional(),
   avatar: z.string().optional(),
   website: z.string().optional(),
+  // AI vetting interview result (computed client-side from the streamed
+  // /api/ai/evaluate response; stored so the platform has an auditable
+  // admission record for every account).
+  vettingScore: z.number().int().min(0).max(100).optional(),
+  vettingReport: z.record(z.string(), z.any()).optional(),
 });
 
 const loginSchema = z.object({

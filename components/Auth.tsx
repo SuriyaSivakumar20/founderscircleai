@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
+import { EvaluationResult } from '../services/geminiService';
 import { apiService } from '../services/apiService';
+import { LogoMark } from './Brand';
 
 interface AuthProps {
-  onboardingScore: number;
+  /** Real AI evaluation from the onboarding interview — persisted with the account. */
+  vetting: EvaluationResult | null;
   onRegister: (user: User) => void;
 }
 
@@ -28,7 +31,7 @@ const SECTORS = [
   'Other',
 ];
 
-const Auth: React.FC<AuthProps> = ({ onboardingScore, onRegister }) => {
+const Auth: React.FC<AuthProps> = ({ vetting, onRegister }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -50,8 +53,8 @@ const Auth: React.FC<AuthProps> = ({ onboardingScore, onRegister }) => {
       setError('Passwords do not match.');
       return;
     }
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
 
@@ -67,6 +70,23 @@ const Auth: React.FC<AuthProps> = ({ onboardingScore, onRegister }) => {
         location: formData.location.trim() || undefined,
         description: formData.description.trim() || undefined,
         avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(formData.name)}&backgroundColor=dbeafe&textColor=1e40af`,
+        // Persist the AI vetting outcome so the account carries an auditable
+        // admission record (User.vettingScore / User.vettingReport).
+        ...(vetting
+          ? {
+              vettingScore: vetting.score,
+              vettingReport: {
+                scoreLetter: vetting.scoreLetter,
+                verdict: vetting.verdict,
+                feedback: vetting.feedback,
+                dimensionScores: vetting.dimensionScores,
+                competitors: vetting.competitors,
+                strengths: vetting.strengths,
+                recommendations: vetting.recommendations,
+                admissionStatus: vetting.admissionStatus,
+              },
+            }
+          : {}),
       });
       // data.token is stored by apiService.register → localStorage
       onRegister(data.user);
@@ -84,25 +104,25 @@ const Auth: React.FC<AuthProps> = ({ onboardingScore, onRegister }) => {
   const isFounder = formData.role === 'FOUNDER';
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b1120] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-surface-0 flex items-center justify-center p-6">
       <div className="w-full max-w-2xl">
 
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/30 mb-4 text-2xl">
-            🐦
+          <div className="inline-flex mb-5">
+            <LogoMark size={52} />
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="font-display text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
             Create your B.I.R.D profile
           </h1>
           <p className="text-slate-500 mt-2 text-sm">
             AI Vetting Score:
-            <span className="ml-1 font-bold text-blue-600">{onboardingScore}/10</span>
+            <span className="ml-1 font-bold text-blue-600">{vetting ? `${vetting.score}/100 — ${vetting.admissionStatus}` : 'skipped'}</span>
             {' '}— Your account will be permanently saved to our database.
           </p>
         </div>
 
-        <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-8">
+        <div className="bg-white dark:bg-surface-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-8">
 
           <form onSubmit={handleSubmit} className="space-y-6">
 
@@ -171,10 +191,10 @@ const Auth: React.FC<AuthProps> = ({ onboardingScore, onRegister }) => {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   autoComplete="new-password"
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all dark:text-white"
-                  placeholder="Min 6 characters"
+                  placeholder="Min 8 characters"
                   value={formData.password}
                   onChange={e => setFormData(f => ({ ...f, password: e.target.value }))}
                 />

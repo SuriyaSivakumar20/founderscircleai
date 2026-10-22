@@ -1,94 +1,212 @@
-# FoundersCircle API Documentation
+# B.I.R.D API Documentation
 
-## Base URL
-`http://localhost:3000/api`
+Base URL: `http://localhost:3000/api` (dev) — every route below lives under `/api`.
 
-## Authentication
+Authentication uses `Authorization: Bearer <token>` on every endpoint except
+`/auth/register`, `/auth/login`, `/ai/*` (rate-limited, pre-signup) and `/health`.
+All error responses are JSON: `{ "message": string }` (validation errors may also
+include `{ "errors": zodIssue[] }`).
 
-### Register
-`POST /auth/register`
-- Body: `email`, `password`, `name`, `role`, `industry`, `description`, `avatar`, `website`
-- Response: `{ user, token }`
+---
 
-### Login
-`POST /auth/login`
-- Body: `email`, `password`
-- Response: `{ user, token }`
+## Health
 
-### Get Current User
-`GET /auth/me`
-- Headers: `Authorization: Bearer <token>`
-- Response: `User object`
+### `GET /health`
+No auth. → `{ status: "ok", platform, vercel? }`
 
-## Posts
+---
 
-### Create Post
-`POST /posts`
-- Headers: `Authorization: Bearer <token>`
-- Body: `content`, `image` (optional)
-- Response: `Post object with author`
+## Auth (`/auth`)
 
-### Get Feed
-`GET /posts/feed?page=1&limit=10`
-- Headers: `Authorization: Bearer <token>`
-- Response: `{ posts, total, page, totalPages }`
+### `POST /auth/register` *(rate-limited)*
+Body: `email` (valid), `password` (**min 8 chars**), `name` (min 2), `role`
+(`FOUNDER` | `INVESTOR` — `ADMIN` can never be self-registered), optional
+`industry`, `location`, `description`, `avatar`, `website`, and the AI vetting
+outcome `vettingScore` (0–100 int) + `vettingReport` (object).
+→ `201 { user, token }` — user has no password hash; token is HS256 JWT.
 
-### Like/Unlike Post
-`POST /posts/:postId/like`
-- Headers: `Authorization: Bearer <token>`
-- Response: `{ message: 'Liked' | 'Unliked' }`
+### `POST /auth/login` *(rate-limited)*
+Body: `email`, `password`.
+→ `200 { user, token }` · `401` on bad credentials.
 
-### Add Comment
-`POST /posts/:postId/comment`
-- Headers: `Authorization: Bearer <token>`
-- Body: `content`
-- Response: `Comment object with author`
+### `GET /auth/me`
+→ The full authenticated user row (minus password), including `vettingScore`.
 
-## Users
+---
 
-### Get Profile
-`GET /users/:id`
-- Headers: `Authorization: Bearer <token>`
-- Response: `User object with posts, followers, following`
+## Posts (`/posts`)
 
-### Update Profile
-`PUT /users/profile`
-- Headers: `Authorization: Bearer <token>`
-- Body: `name`, `industry`, `description`, `avatar`, `website`
-- Response: `Updated User object`
+### `POST /posts`
+Body: `content` (1–5000), optional `tag`, `metric`, `metricLabel`, `image`
+(http(s) URL or inline `data:image/…`, capped 2 MB), `referencedCompanyId`,
+`referencedInvestorId`.
+→ `201` full post (author, likes, up to 50 comments) · `400` validation.
 
-### Follow/Unfollow User
-`POST /users/:id/follow`
-- Headers: `Authorization: Bearer <token>`
-- Response: `{ message: 'Followed' | 'Unfollowed' }`
+### `GET /posts/feed?page=1&limit=10`
+→ `{ posts, total, page, totalPages }` — newest first; each post carries
+`likes[]`, up to 50 recent `comments[]` and the true `commentsTotal`.
 
-## Real-time (Socket.IO)
+### `POST /posts/:postId/like`
+Toggles. → `{ liked: boolean, message }` · `404` if the post doesn't exist.
+Notifies the author (never for self-likes).
 
-### Events
-- `register(userId)`: Register socket with user ID
-- `send_message({ senderId, receiverId, text })`: Send a private message
-- `receive_message`: Listen for incoming messages
+### `POST /posts/:postId/comment`
+Body: `content` (1–2000). → `201` comment with user · `400`/`404`.
+Notifies the author (never for self-comments).
 
-## How to run locally
+---
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+## Users (`/users`)
 
-2. **Configure environment**:
-   Create a `.env` file based on `.env.example`:
-   ```env
-   JWT_SECRET=your-secret-key
-   SEED_DB=true
-   ```
-   Setting `SEED_DB=true` will populate the database with 50 mock users and posts on the first run.
+### `PUT /users/profile`
+Body (all optional, whitelisted — role/email/password can never be escalated):
+`name`, `industry`, `stage`, `location`, `description`, `teamSize`,
+`foundedYear`, `targetRaise`, `minCheckSize`, `maxCheckSize`, `avatar`,
+`website` (both must be valid http(s) URLs).
+→ Updated user (minus password) · `400` on invalid input.
 
-3. **Start the server**:
-   ```bash
-   npm run dev
-   ```
-   The server will start on `http://localhost:3000`.
+### `GET /users/search?q=term`
+Auth required. Up to 8 users matching name/industry/location (excluding self).
+→ `{ users: [...] }` (id, name, role, industry, location, avatar).
 
-4. **Database**:
-   The application uses SQLite. The database file will be created at `database.sqlite` in the root directory.
+### `GET /users/:id`
+Auth required. Public profile **without email** (PII) + last 10 posts +
+`createdAt` + `vettingScore`. Logs a real `PROFILE_VIEW` analytics event
+targeted at the profile owner (never for self-views). → `404` if unknown.
+
+---
+
+## Matches (`/matches`)
+
+The deterministic engine scores the opposing entity type:
+founders see Investors, investors see Companies, admins see Companies.
+Weights: sector 40 (exact 40 / same group 20) · stage 30 (exact 30 / adjacent 15 /
+unknown 10) · geography 15 (exact 15 / shared token 10 / unknown 5) ·
+ticket 15 (in range 15 / within 2× 7 / unknown 5). Capped at 100.
+
+### `GET /matches?sector=&stage=&location=`
+→ `{ matches, total, viewerRole }` — each match includes `matchScore`,
+`matchLabel` (High ≥80 / Good ≥60 / Moderate ≥40 / Low), `entityType`, and
+`interested: boolean` (persisted for the current user).
+
+### `POST /matches/interest`
+Body: `entityId`, `entityType` (`company` | `investor`).
+Idempotent (unique per user+entity). → `201 { interest, message }` ·
+`404` if the entity doesn't exist.
+
+---
+
+## Connections (`/connections`)
+
+Messaging is unlocked only by an `ACCEPTED` connection. Only the **receiver**
+of a request can accept or reject it.
+
+### `POST /connections`
+Body: `receiverId` (must be another existing user).
+→ `201 { connection }` (status `PENDING`, notifies the receiver) ·
+`400` self-connect · existing row returned with `duplicate: true`.
+
+### `GET /your-connections` → `GET /connections`
+→ `{ sent: [...], received: [...] }` full connection rows.
+
+### `PATCH /connections/:id`
+Body: `status` (`ACCEPTED` | `REJECTED`).
+→ `{ connection }` · `403` if you are not the receiver · `404` unknown ·
+`400` invalid status. Accepting notifies the requester.
+
+---
+
+## Messages (`/messages`)
+
+Authorization (server-enforced on every path): both users must have an
+`ACCEPTED` connection.
+
+### `GET /messages/conversations`
+→ `{ conversations: [{ peer, lastMessage, unreadCount }] }` — one row per
+accepted connection with the peer's public profile, latest message and the
+true unread count.
+
+### `GET /messages/:peerId?page=1&limit=30`
+→ `{ messages, total, page, totalPages }` — oldest-first in `messages`.
+→ `403` without an accepted connection.
+
+### `POST /messages`
+Body: `receiverId`, `content` (1–5000).
+→ `201 { message }` (server id + timestamp; notifies the recipient) ·
+`400` invalid · `403` without accepted connection · `404` unknown recipient.
+
+### `POST /messages/:peerId/read`
+Marks every message from `peerId → me` as read (idempotent).
+→ `{ markedRead: number }`.
+
+---
+
+## Notifications (`/notifications`)
+
+Types: `CONNECTION_REQUEST`, `CONNECTION_ACCEPTED`, `NEW_LIKE`, `NEW_COMMENT`,
+`MESSAGE`.
+
+### `GET /notifications`
+→ `{ notifications, unreadCount }` — latest 30 + the true unread count.
+
+### `POST /notifications/read-all`
+→ `{ markedRead: number }`.
+
+### `PATCH /notifications/:id/read`
+Scoped to the authenticated receiver (IDOR-safe).
+→ `{ notification }` · `404` if not yours.
+
+---
+
+## Analytics (`/analytics`)
+
+### `GET /analytics/summary`
+Every figure is a live DB count:
+- `platform`: `totalUsers`, `totalFounders`, `totalInvestors`, `totalPosts`,
+  `totalConnections`, `acceptedConnections`, `pendingConnections`,
+  `totalInterests`, `profileViewsThisWeek` (real PROFILE_VIEW events),
+  `totalMatches` (= accepted connections), `matchAccuracy` (accepted/total %).
+- `user`: `myConnections`, `myPosts`, `profileViews` (views of *your* profile),
+  `connectionRate`.
+
+---
+
+## AI proxy (`/ai`) *(unauthenticated, rate-limited per IP)*
+
+Both endpoints stream **SSE** (`data: {"text": "…"}` frames).
+
+### `POST /ai/question`
+Body: `role` (`FOUNDER` | `INVESTOR`; anything else is treated as FOUNDER),
+`previousInteraction` (`[{q, a}]`, capped at the last 6 turns × 4000 chars).
+→ Streamed question text.
+
+### `POST /ai/evaluate`
+Body: `role`, `interaction` (`[{q, a}]`).
+→ Streamed JSON report: `score` (0–100), `scoreLetter`, `verdict`, `feedback`,
+`dimensionScores` (5 × /20), `competitors[]`, `strengths[]`,
+`recommendations[]`, `admissionStatus` (`ADMITTED` ≥70 / `CONDITIONAL` 45–69 /
+`REJECTED` <45).
+
+**Failure contract (no fabricated results):** if Gemini is unavailable the
+server returns `503 { message }` before streaming, or an SSE frame
+`data: {"error": "…"}` mid-stream. The client shows an error + Retry — it never
+invents questions or scores.
+
+---
+
+## Socket.IO (dev / self-hosted only; `server.ts`)
+
+- **Auth:** `io({ auth: { token: <JWT> } })` (or `Authorization` header). The
+  server derives the sender identity from the token — client-supplied sender
+  ids are ignored. Invalid/missing tokens are rejected at the handshake.
+- **`send_message`** `{ receiverId, text }` → **ack**
+  `{ ok: true, message: { id, senderId, receiverId, text, timestamp, createdAt } }`
+  or `{ ok: false, error }`. The message is authorized (accepted connection
+  required) and **persisted before delivery**.
+- **`receive_message`** → same payload shape, emitted to every online socket of
+  the receiver and the sender's other sockets.
+- **`typing`** `{ receiverId, isTyping }` → forwarded as
+  `{ senderId, isTyping }`.
+
+On Vercel there are no WebSockets; the chat UI automatically falls back to the
+REST endpoints above with polling.

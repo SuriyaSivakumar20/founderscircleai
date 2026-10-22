@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { apiService } from '../services/apiService';
+import { LogoMark } from './Brand';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -11,6 +12,11 @@ const DEMO_ACCOUNTS = [
   { email: 'founder@bird.ai', password: 'password123', role: 'FOUNDER' as const, name: 'Arjun Nair', industry: 'Fintech / Payments', label: 'Founder Demo' },
   { email: 'investor@bird.ai', password: 'password123', role: 'INVESTOR' as const, name: 'Kavya Reddy', industry: 'Venture Capital', label: 'Investor Demo' },
 ];
+
+// Demo credentials only exist where the seed creates them (local dev, or
+// deployments that explicitly set VITE_SHOW_DEMO=true). Never in production.
+const DEMO_AVAILABLE =
+  import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO === 'true';
 
 const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
   const [email, setEmail] = useState('');
@@ -49,20 +55,20 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b1120] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-surface-0 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
 
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/30 mb-4 text-2xl">
-            🐦
+          <div className="inline-flex mb-5">
+            <LogoMark size={52} />
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Sign in to B.I.R.D</h1>
-          <p className="text-slate-500 mt-2 text-sm">Business Intelligence & Resource Development</p>
+          <h1 className="font-display text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Sign in to B.I.R.D</h1>
+          <p className="label-caps text-slate-400 mt-3 text-[9px]">Private Capital Network</p>
         </div>
 
         {/* Card */}
-        <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-8">
+        <div className="bg-white dark:bg-surface-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-8">
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
@@ -131,8 +137,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
           </form>
         </div>
 
-        {/* Demo Accounts */}
-        <div className="mt-5 bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+        {/* Demo Accounts — dev/demo deployments only */}
+        {DEMO_AVAILABLE && (
+        <div className="mt-5 bg-white dark:bg-surface-1 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 text-center">
             Quick Access — Demo Accounts
           </p>
@@ -152,6 +159,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onBack }) => {
           </div>
           <p className="text-[10px] text-slate-400 text-center mt-3">Click a card to auto-fill credentials</p>
         </div>
+        )}
 
       </div>
     </div>

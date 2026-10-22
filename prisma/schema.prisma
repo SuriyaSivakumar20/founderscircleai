@@ -28,6 +28,8 @@ model User {
   followerCount Int      @default(0)
   teamSize      Int      @default(1)
   foundedYear   Int?
+  vettingScore  Int?     // AI interview score (0-100), set at registration
+  vettingReport Json?    // Full AI evaluation report from the onboarding interview
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -40,6 +42,9 @@ model User {
   receivedConnections  Connection[]   @relation("ReceivedConnections")
   notifications        Notification[] @relation("NotificationReceiver")
   analyticsEvents      AnalyticsEvent[]
+  sentMessages         Message[]      @relation("MessageSender")
+  receivedMessages     Message[]      @relation("MessageReceiver")
+  interests            Interest[]
 }
 
 model Company {
@@ -97,6 +102,9 @@ model Post {
 
   likes         Like[]
   comments      Comment[]
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
 }
 
 model Like {
@@ -117,6 +125,8 @@ model Comment {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
   post      Post     @relation(fields: [postId], references: [id])
+
+  @@index([postId, createdAt])
 }
 
 model Follow {
@@ -149,13 +159,48 @@ model Connection {
 model Notification {
   id          String   @id @default(uuid())
   receiverId  String
-  type        String   // CONNECTION_REQUEST | CONNECTION_ACCEPTED | NEW_POST | NEW_LIKE
+  type        String   // CONNECTION_REQUEST | CONNECTION_ACCEPTED | NEW_LIKE | MESSAGE
   message     String
   isRead      Boolean  @default(false)
-  referenceId String?  // postId, connectionId, etc.
+  referenceId String?  // postId, connectionId, messageId, etc.
   createdAt   DateTime @default(now())
 
   receiver    User @relation("NotificationReceiver", fields: [receiverId], references: [id])
+
+  @@index([receiverId, isRead])
+  @@index([receiverId, createdAt])
+}
+
+// Direct messages between two connected users.
+// Authorization rule (enforced in messageController): both directions of
+// messaging require an ACCEPTED Connection between the two users.
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("MessageSender",   fields: [senderId],   references: [id])
+  receiver User @relation("MessageReceiver", fields: [receiverId], references: [id])
+
+  @@index([receiverId, isRead])
+  @@index([senderId, receiverId, createdAt])
+}
+
+// A user's persisted interest in a matched Company/Investor entity
+// (Discover page "Request intro"). Idempotent via @@unique.
+model Interest {
+  id         String   @id @default(uuid())
+  userId     String
+  entityType String   // 'company' | 'investor'
+  entityId   String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, entityType, entityId])
 }
 
 // Analytics event log — drives dashboard numbers

@@ -5,22 +5,12 @@ import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import cors from "cors";
 import dotenv from "dotenv";
 import { seedDatabase } from "./backend/utils/seed";
-import authRoutes from "./backend/routes/authRoutes";
-import postRoutes from "./backend/routes/postRoutes";
-import userRoutes from "./backend/routes/userRoutes";
-import matchRoutes from "./backend/routes/matchRoutes";
-import connectionRoutes from "./backend/routes/connectionRoutes";
-import analyticsRoutes from "./backend/routes/analyticsRoutes";
-import notificationRoutes from "./backend/routes/notificationRoutes";
+import { createApp } from "./backend/app";
 import prisma from "./backend/prismaClient";
-import {
-  corsOriginVerifier,
-  rateLimit,
-  securityHeaders,
-} from "./backend/config/security";
+import { corsOriginVerifier } from "./backend/config/security";
+import { areConnected } from "./backend/controllers/messageController";
 
 dotenv.config();
 
@@ -28,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
-  const app = express();
+  const app = createApp();
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
     // SECURITY: origin was "*" — any website could open a socket as a user.
@@ -37,191 +27,20 @@ async function startServer() {
 
   const PORT = 3000;
 
-  // SECURITY: origin was "*" — any origin could call the API with a user's token.
-  app.use(cors({ origin: corsOriginVerifier }));
-  app.use(securityHeaders);
-  app.use(express.json({ limit: '1mb' }));
-  app.disable("x-powered-by");
-
-  // AI endpoints spend real money (Gemini) and are unauthenticated during
-  // onboarding, so they are rate-limited per IP to prevent quota theft.
-  const aiRateLimiter = rateLimit(20, 60_000);
-
-  // Caps public AI request bodies (unbounded arrays/strings = token spend).
-  const { sanitizeInteraction, sanitizeRole } = await import("./backend/utils/aiInput");
-
   // Always seed on start (upsert is idempotent)
   await seedDatabase();
 
-  // ── API Routes ────────────────────────────────────────────────────────────
-  app.use("/api/auth",          authRoutes);
-  app.use("/api/posts",         postRoutes);
-  app.use("/api/users",         userRoutes);
-  app.use("/api/matches",       matchRoutes);
-  app.use("/api/connections",   connectionRoutes);
-  app.use("/api/analytics",     analyticsRoutes);
-  app.use("/api/notifications", notificationRoutes);
-
-  // Health check
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", platform: "B.I.R.D — Business Intelligence & Resource Development" });
-  });
-
-  // ── AI Proxy Routes (Gemini runs server-side) ─────────────────────────────
-  const STARTUP_KNOWLEDGE_BASE = `
-[STARTUP DATASET]
-1. Detect Technologies (Industrial AI, Chennai): AI-powered inspection platform (T-Pulse). Moat: automated inspection. Investors: Accel, Elevation.
-2. WayCool Foods (Agri-tech/Supply Chain, Chennai): Farm-to-retail supply chain. Target: Retailers, kirana. Investors: Lightrock, FMO.
-3. Ather Energy (Electric Vehicles, Bangalore): Smart electric scooters. Investors: Hero MotoCorp, Tiger Global.
-4. Yulu (Mobility/EV, Bangalore): Shared electric micro-mobility. Investors: Magna, Blume Ventures.
-5. Khatabook (Fintech, Bangalore): Digital ledger app for SMBs. Investors: Sequoia India, Tencent.
-[END DATASET]
-`;
-
-  app.post("/api/ai/question", aiRateLimiter, async (req, res) => {
-    const role = sanitizeRole(req.body?.role);
-    const previousInteraction = sanitizeInteraction(req.body?.previousInteraction);
-    try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-
-      const conversationHistory = (previousInteraction || [])
-        .map((i: any, idx: number) => `Exchange ${idx + 1}:\nAnalyst: ${i.q}\nSubject: ${i.a}`)
-        .join('\n\n');
-
-      const questionNumber = (previousInteraction || []).length + 1;
-      const isFirst = questionNumber === 1;
-
-      const ANALYST_PERSONA = `You are a senior strategic analyst at B.I.R.D (Business Intelligence & Resource Development), an elite investor-startup matching network.\n\n${STARTUP_KNOWLEDGE_BASE}`;
-      const founderDirective = `Subject is a startup founder. Match their idea to the closest startup in the dataset. Name the company. Challenge them: "Why will you win against [Company]?"`;
-      const investorDirective = `Subject is a VC/investor. Probe investment thesis. Use dataset companies as real-world benchmarks.`;
-      const directive = role === 'FOUNDER' ? founderDirective : investorDirective;
-
-      const prompt = isFirst
-        ? `${ANALYST_PERSONA}\n\n${directive}\n\nQuestion 1 of 5. Ask a sharp opening question to identify their industry for benchmarking. Return ONLY the question text.`
-        : `${ANALYST_PERSONA}\n\n${directive}\n\nConversation:\n${conversationHistory}\n\nQuestion ${questionNumber} of 5. Based on their last answer, name a dataset company and demand specific differentiation. Return ONLY the question text.`;
-
-      const responseStream = await ai.models.generateContentStream({ model: 'gemini-2.0-flash', contents: prompt });
-
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      for await (const chunk of responseStream) {
-        if (chunk.text) {
-          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
-        }
-      }
-      res.end();
-    } catch (err: any) {
-      console.error('AI question error:', err.message);
-      // Graceful fallback — return a static question so onboarding never breaks
-      const fallbackQuestions = [
-        "Describe your startup's core product and the primary problem it solves in one sentence.",
-        "Who is your ideal customer, and how are you currently acquiring them?",
-        "What is your current monthly revenue, and what drove your last month of growth?",
-        "Who are your top 3 competitors and what specifically makes you better?",
-        "What will you use the funding for, and what milestones will it unlock?",
-      ];
-      const qIdx = Math.min(previousInteraction.length, fallbackQuestions.length - 1);
-      if (!res.headersSent) {
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.write(`data: ${JSON.stringify({ text: fallbackQuestions[qIdx] })}\n\n`);
-        res.end();
-      }
-    }
-  });
-
-  app.post("/api/ai/evaluate", aiRateLimiter, async (req, res) => {
-    const role = sanitizeRole(req.body?.role);
-    const interaction = sanitizeInteraction(req.body?.interaction);
-
-    // SECURITY: the "founders backdoor bypass" magic phrase that returned
-    // score 96 / ADMITTED without any evaluation has been removed.
-    // It was a client-supplied admission bypass.
-
-    try {
-      const { GoogleGenAI, Type } = await import("@google/genai");
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-
-      const log = (interaction || []).map((i: any, idx: number) => `Q${idx + 1}: ${i.q}\nA${idx + 1}: ${i.a}`).join('\n\n');
-      const roleContext = role === 'FOUNDER' ? 'startup founder' : 'venture capitalist';
-
-      const prompt = `You are a rigorous strategic analyst at B.I.R.D evaluating a ${roleContext} for platform admission.\n\n${STARTUP_KNOWLEDGE_BASE}\n\nInterview:\n${log}\n\nScore each dimension out of 20 (total = 100): differentiation, competitivePositioning, businessViability, strategyClarity, innovationFactor.\nAdmission: ADMITTED if >=70, CONDITIONAL if 45-69, REJECTED if <45.\nReturn JSON only.`;
-
-      const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-2.0-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              score: { type: Type.NUMBER },
-              scoreLetter: { type: Type.STRING },
-              verdict: { type: Type.STRING },
-              feedback: { type: Type.STRING },
-              dimensionScores: {
-                type: Type.OBJECT,
-                properties: {
-                  differentiation: { type: Type.NUMBER },
-                  competitivePositioning: { type: Type.NUMBER },
-                  businessViability: { type: Type.NUMBER },
-                  strategyClarity: { type: Type.NUMBER },
-                  innovationFactor: { type: Type.NUMBER },
-                },
-                required: ['differentiation', 'competitivePositioning', 'businessViability', 'strategyClarity', 'innovationFactor'],
-              },
-              competitors: { type: Type.ARRAY, items: { type: Type.STRING } },
-              strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-              recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
-              admissionStatus: { type: Type.STRING },
-            },
-            required: ['score', 'scoreLetter', 'verdict', 'feedback', 'dimensionScores', 'competitors', 'strengths', 'recommendations', 'admissionStatus'],
-          },
-        },
-      });
-
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      for await (const chunk of responseStream) {
-        if (chunk.text) {
-          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
-        }
-      }
-      res.end();
-    } catch (err: any) {
-      console.error('AI evaluate error:', err.message);
-      // Graceful fallback evaluation — never crash the onboarding
-      if (!res.headersSent) {
-        const fallback = {
-          score: 65, scoreLetter: 'B',
-          verdict: 'Conditional admission — demonstrates potential with refinement needed.',
-          feedback: 'AI evaluation temporarily unavailable. Score computed via deterministic baseline assessment.',
-          dimensionScores: { differentiation: 12, competitivePositioning: 13, businessViability: 14, strategyClarity: 13, innovationFactor: 13 },
-          competitors: [],
-          strengths: ['Clear problem identification', 'Demonstrated domain knowledge'],
-          recommendations: ['Sharpen competitive differentiation narrative', 'Quantify traction metrics more precisely'],
-          admissionStatus: 'CONDITIONAL',
-        };
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.write(`data: ${JSON.stringify({ text: JSON.stringify(fallback) })}\n\n`);
-        res.end();
-      }
-    }
-  });
-
-  // ── Socket.IO ─────────────────────────────────────────────────────────────
-  const activeUsers = new Map<string, string>(); // userId → socketId
+  // ── Socket.IO — persistent, authorized direct messaging ───────────────────
+  // userId → set of socket ids (a user may have several tabs/devices open).
+  const activeUsers = new Map<string, Set<string>>();
 
   // SECURITY: the client must prove its identity via the same JWT used for the
-  // REST API. Previously the server trusted a client-supplied `senderId`, so any
-  // anonymous connection could impersonate any user.
-  const jwt = await import("jsonwebtoken");
+  // REST API. The server never trusts a client-supplied senderId.
+  const jwtModule = (await import("jsonwebtoken")) as any;
+  // ESM/CJS interop: the named `verify` export may only exist on `.default`
+  // (without this, every handshake would throw a masked "invalid token").
+  const jwtVerify: (token: string, secret: string) => { id: string } =
+    jwtModule.verify ?? jwtModule.default?.verify;
   const { getJwtSecret } = await import("./backend/config/security");
 
   io.use((socket, next) => {
@@ -230,7 +49,7 @@ async function startServer() {
       (socket.handshake.headers.authorization || "").replace(/^Bearer /i, "");
     if (!token) return next(new Error("Unauthorized — no token provided"));
     try {
-      const decoded = jwt.verify(token, getJwtSecret()) as { id: string };
+      const decoded = jwtVerify(token, getJwtSecret());
       (socket.data as any).userId = decoded.id;
       next();
     } catch {
@@ -239,29 +58,80 @@ async function startServer() {
   });
 
   io.on("connection", (socket) => {
-    const authUserId = (socket.data as any).userId as string;
+    const userId = (socket.data as any).userId as string;
 
-    socket.on("register", () => {
-      activeUsers.set(authUserId, socket.id);
-    });
+    // Auto-register — no client "register" event needed.
+    if (!activeUsers.has(userId)) activeUsers.set(userId, new Set());
+    activeUsers.get(userId)!.add(socket.id);
 
-    socket.on("send_message", (data: { receiverId: string; text: string }) => {
-      // senderId is taken from the verified token, never from the payload.
-      if (typeof data?.receiverId !== "string" || !data.receiverId) return;
-      const msg = {
-        id: Math.random().toString(36).substr(2, 9),
-        senderId: authUserId,
-        receiverId: data.receiverId,
-        text: typeof data?.text === "string" ? data.text.slice(0, 5000) : "",
-        timestamp: Date.now(),
-      };
-      const receiverSocketId = activeUsers.get(msg.receiverId);
-      if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", msg);
-      socket.emit("receive_message", msg);
+    socket.on(
+      "send_message",
+      async (data: { receiverId: string; text: string }, ack?: (response: any) => void) => {
+        try {
+          const receiverId = data?.receiverId;
+          const text = typeof data?.text === "string" ? data.text.trim() : "";
+          if (typeof receiverId !== "string" || !receiverId || !text || text.length > 5000) {
+            ack?.({ ok: false, error: "Invalid message" });
+            return;
+          }
+
+          // AUTHORIZATION: messaging requires an accepted connection.
+          if (!(await areConnected(userId, receiverId))) {
+            ack?.({ ok: false, error: "No accepted connection with this user" });
+            return;
+          }
+
+          // Persist first — delivery is never simulated.
+          const message = await prisma.message.create({
+            data: { senderId: userId, receiverId, content: text },
+          });
+
+          // Best-effort notification for the bell (non-blocking).
+          const sender = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { name: true },
+          });
+          prisma.notification.create({
+            data: {
+              receiverId,
+              type: "MESSAGE",
+              message: `New message from ${sender?.name ?? "a connection"}.`,
+              referenceId: message.id,
+            },
+          }).catch(() => {});
+
+          // Deliver to every online socket of the receiver, and echo to the
+          // sender's other sockets (the sending socket gets the ack).
+          const payload = { id: message.id, senderId: userId, receiverId, text: message.content, timestamp: message.createdAt.getTime(), createdAt: message.createdAt };
+          const receiverSockets = activeUsers.get(receiverId);
+          if (receiverSockets) {
+            for (const sid of receiverSockets) io.to(sid).emit("receive_message", payload);
+          }
+          for (const sid of activeUsers.get(userId) ?? []) {
+            if (sid !== socket.id) io.to(sid).emit("receive_message", payload);
+          }
+          ack?.({ ok: true, message: payload });
+        } catch (err: any) {
+          console.error("socket send_message error:", err?.message);
+          ack?.({ ok: false, error: "Failed to send message" });
+        }
+      }
+    );
+
+    socket.on("typing", (data: { receiverId: string; isTyping: boolean }) => {
+      if (typeof data?.receiverId !== "string") return;
+      const receiverSockets = activeUsers.get(data.receiverId);
+      if (!receiverSockets) return;
+      const payload = { senderId: userId, isTyping: !!data?.isTyping };
+      for (const sid of receiverSockets) io.to(sid).emit("typing", payload);
     });
 
     socket.on("disconnect", () => {
-      if (activeUsers.get(authUserId) === socket.id) activeUsers.delete(authUserId);
+      const sockets = activeUsers.get(userId);
+      if (sockets) {
+        sockets.delete(socket.id);
+        if (sockets.size === 0) activeUsers.delete(userId);
+      }
     });
   });
 
@@ -290,7 +160,7 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.use((req, res) => {
-      if (req.originalUrl.startsWith('/api')) return res.status(404).json({ error: "Not Found" });
+      if (req.originalUrl.startsWith('/api')) return res.status(404).json({ message: "Not Found" });
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
@@ -300,4 +170,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("Fatal server error:", err);
+  process.exit(1);
+});

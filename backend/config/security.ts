@@ -132,8 +132,8 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
-  // Camera/mic are needed by the in-app video call (same-origin only).
-  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  // No browser feature uses camera/mic/geolocation — deny them explicitly.
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
   // API responses carry tokens/PII — never let browsers or proxies cache them.
   if (req.path.startsWith('/api')) {

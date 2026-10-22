@@ -6,7 +6,7 @@ import { computeMatchScore } from '../utils/matchingEngine.js';
  * POST /api/connections
  * Body: { receiverId: string }
  *
- * Creates a real Connection row in SQLite via Prisma.
+ * Creates a real Connection row via Prisma.
  * Also creates a Notification for the receiver.
  * Also logs an analytics event.
  */

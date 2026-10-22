@@ -1,46 +1,231 @@
 @import "tailwindcss";
 
-/* ── Enable class-based dark mode (Tailwind v4) ──────────── */
-/* App.tsx toggles `dark` class on <html>; this wires it up  */
+/* ── Class-based dark mode (App.tsx toggles `dark` on <html>) ── */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ══════════════════════════════════════════════════════════════
+   B.I.R.D DESIGN SYSTEM
+   A venture-capital design language: warm graphite neutrals,
+   jade primary (growth/capital), antique gold for elite accents,
+   Fraunces display serif + Manrope grotesque + JetBrains Mono.
+   ══════════════════════════════════════════════════════════════ */
 @theme {
-    --font-family-sans: 'Inter', system-ui, sans-serif;
-    --font-family-serif: 'Inter', system-ui, sans-serif;
+    /* Typography */
+    --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
-    --color-primary-50: #eff6ff;
-    --color-primary-100: #dbeafe;
-    --color-primary-200: #bfdbfe;
-    --color-primary-300: #93c5fd;
-    --color-primary-400: #60a5fa;
-    --color-primary-500: #3b82f6;
-    --color-primary-600: #2563EB;
-    --color-primary-700: #1d4ed8;
-    --color-primary-800: #1e40af;
-    --color-primary-900: #1e3a8a;
-    --color-primary-950: #172554;
+    /* ── Warm graphite neutrals (replaces cold slate) ── */
+    --color-slate-50:  #F8F7F4;
+    --color-slate-100: #EFEEE9;
+    --color-slate-200: #E1DFD7;
+    --color-slate-300: #C9C6BA;
+    --color-slate-400: #A29E91;
+    --color-slate-500: #7E7A70;
+    --color-slate-600: #5F5C54;
+    --color-slate-700: #46443F;
+    --color-slate-800: #2C2B28;
+    --color-slate-900: #1D1C1A;
+    --color-slate-950: #131211;
 
-    --color-accent: #2563EB;
-    --color-accent-light: #3b82f6;
-    --color-accent-dark: #1d4ed8;
+    /* ── Jade primary (replaces generic tech blue) ── */
+    --color-blue-50:  #EDF9F3;
+    --color-blue-100: #D6F1E3;
+    --color-blue-200: #AFE4CA;
+    --color-blue-300: #7ED1AC;
+    --color-blue-400: #48BA89;
+    --color-blue-500: #22A170;
+    --color-blue-600: #0F865B;
+    --color-blue-700: #0C6B49;
+    --color-blue-800: #0A553A;
+    --color-blue-900: #08432E;
+    --color-blue-950: #052B1E;
 
-    --color-secondary: #F8FAFC;
+    /* ── Antique gold — the "elite access" accent ── */
+    --color-gold-50:  #FBF6EA;
+    --color-gold-100: #F5E9CC;
+    --color-gold-200: #EBD49B;
+    --color-gold-300: #DFBD6E;
+    --color-gold-400: #D0A54F;
+    --color-gold-500: #C08F38;
+    --color-gold-600: #A1732C;
+    --color-gold-700: #7D5825;
+    --color-gold-800: #5F4420;
+    --color-gold-900: #4B371D;
 
-    --color-paper: #FFFFFF;
-    --color-ink: #0F172A;
+    /* ── Semantic surfaces (dark theme) ── */
+    --color-surface-0: #0B0E0D;   /* app background       */
+    --color-surface-1: #121615;   /* cards                */
+    --color-surface-2: #1A201E;   /* insets, hovers       */
+
+    /* Brand aliases */
+    --color-paper: #F8F7F4;
+    --color-ink:   #101312;
 }
 
-/* ── Global typography defaults ─────────────────────────── */
-body {
-    font-family: 'Inter', sans-serif;
-    font-weight: 400;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    color: var(--color-ink);
+/* ── Global base ───────────────────────────────────────────── */
+@layer base {
+    html {
+        scroll-behavior: smooth;
+        background-color: var(--color-paper);
+    }
+    .dark html { background-color: var(--color-surface-0); }
+
+    body {
+        font-family: var(--font-sans);
+        font-weight: 500;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        color: var(--color-ink);
+        font-feature-settings: "ss01" on, "cv05" on;
+    }
+    .dark body {
+        background-color: var(--color-surface-0);
+        color: #EDECE7;
+    }
+
+    ::selection {
+        background-color: rgba(34, 161, 112, 0.25);
+        color: inherit;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-blue-500);
+        outline-offset: 2px;
+        border-radius: 4px;
+    }
+
+    /* Refined scrollbar */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(126, 122, 112, 0.35);
+        border-radius: 8px;
+        border: 3px solid transparent;
+        background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background-color: rgba(126, 122, 112, 0.6); background-clip: content-box; }
 }
 
-h1, h2, h3, h4 {
-    font-family: 'Inter', sans-serif;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
+/* ── Premium primitives ────────────────────────────────────── */
+
+/* Editorial display headings */
+.font-display { font-family: var(--font-display); font-variation-settings: "opsz" 100; }
+.display-italic { font-style: italic; font-variation-settings: "opsz" 144; }
+
+/* Italic display accent in gold */
+.text-gold-gradient {
+    background: linear-gradient(100deg, var(--color-gold-300), var(--color-gold-500) 55%, var(--color-gold-300));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.text-jade-gradient {
+    background: linear-gradient(100deg, var(--color-blue-400), var(--color-blue-600));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Fine top hairline used on "premium" panels */
+.hairline-gold { position: relative; }
+.hairline-gold::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-gold-400), transparent);
+    opacity: 0.6;
+}
+
+/* Micro-label: mono, uppercase, letter-spaced */
+.label-caps {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+/* Card with a soft inner top highlight — "machined" edge */
+.card-elevated {
+    box-shadow:
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.04),
+        0 1px 2px 0 rgba(0, 0, 0, 0.05),
+        0 12px 32px -12px rgba(15, 14, 12, 0.18);
+}
+.dark .card-elevated {
+    box-shadow:
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+        0 1px 2px 0 rgba(0, 0, 0, 0.4),
+        0 18px 48px -16px rgba(0, 0, 0, 0.6);
+}
+
+/* Sweep-shine on button hover */
+.btn-shine { position: relative; overflow: hidden; isolation: isolate; }
+.btn-shine::after {
+    content: "";
+    position: absolute;
+    inset: -20%;
+    background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.22) 50%, transparent 58%);
+    transform: translateX(-130%);
+    transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+}
+.btn-shine:hover::after { transform: translateX(130%); }
+
+/* Faint architectural grid, faded at the edges */
+.bg-grid-fade {
+    background-image:
+        linear-gradient(to right, rgba(126, 122, 112, 0.10) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(126, 122, 112, 0.10) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, black 25%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 30%, black 25%, transparent 75%);
+}
+
+/* Film-grain texture overlay */
+.noise-overlay { position: relative; }
+.noise-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Scroll-reveal (IntersectionObserver toggles .is-visible) */
+.reveal {
+    opacity: 0;
+    transform: translateY(26px);
+    transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.is-visible { opacity: 1; transform: none; }
+
+/* Infinite marquee, edge-masked */
+.marquee-track { display: inline-flex; align-items: center; animation: marquee 38s linear infinite; }
+.marquee-mask {
+    mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* Gentle levitation for hero artifacts */
+@keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+.animate-floaty { animation: floaty 7s ease-in-out infinite; }
+.animate-floaty-slow { animation: floaty 9s ease-in-out infinite; animation-delay: 1.4s; }
+
+/* Soft pulsing halo behind live indicators */
+@keyframes halo { 0% { transform: scale(0.9); opacity: 0.7; } 70% { transform: scale(2.1); opacity: 0; } 100% { opacity: 0; } }
+.animate-halo { animation: halo 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+
+/* Animated dimension bars (width set inline after reveal) */
+.bar-fill { transition: width 1.4s cubic-bezier(0.16, 1, 0.3, 1); transition-delay: var(--bar-delay, 0ms); }
+
+@media (prefers-reduced-motion: reduce) {
+    .marquee-track, .animate-floaty, .animate-floaty-slow, .animate-halo { animation: none !important; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .bar-fill { transition: none; }
 }

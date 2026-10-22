@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import prisma from '../prismaClient.js';
 import { z } from 'zod';
 
@@ -21,28 +21,44 @@ const safeHttpUrl = z
 const updateProfileSchema = z.object({
   name:        z.string().trim().min(2).max(80).optional(),
   industry:    z.string().trim().max(80).optional(),
+  stage:       z.string().trim().max(40).optional(),
+  location:    z.string().trim().max(80).optional(),
   description: z.string().trim().max(2000).optional(),
   avatar:      safeHttpUrl.optional(),
   website:     safeHttpUrl.optional(),
+  teamSize:    z.number().int().min(1).max(100000).optional(),
+  foundedYear: z.number().int().min(1900).max(2100).optional(),
+  targetRaise: z.number().int().min(0).max(100000).optional(),
+  minCheckSize: z.number().int().min(0).max(100000).optional(),
+  maxCheckSize: z.number().int().min(0).max(100000).optional(),
 });
 
-export const getProfile = async (req: Request, res: Response) => {
+/**
+ * GET /api/users/:id — public profile view.
+ * SECURITY: email is never returned (PII must not leak across users), and the
+ * view is logged as a PROFILE_VIEW analytics event targeted at the profile owner.
+ */
+export const getProfile = async (req: any, res: Response) => {
   try {
     const { id } = req.params;
+
     const user = await prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
         name: true,
-        email: true,
         role: true,
         industry: true,
+        stage: true,
+        location: true,
         description: true,
         avatar: true,
         website: true,
+        teamSize: true,
+        foundedYear: true,
+        createdAt: true,
+        vettingScore: true,
         posts: { take: 10, orderBy: { createdAt: 'desc' } },
-        followers: { select: { followerId: true } },
-        following: { select: { followingId: true } },
       },
     });
 
@@ -50,8 +66,16 @@ export const getProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    // Real profile-view tracking (viewer → target), non-blocking.
+    if (req.user.id !== id) {
+      prisma.analyticsEvent.create({
+        data: { userId: req.user.id, eventType: 'PROFILE_VIEW', targetId: id },
+      }).catch(() => {});
+    }
+
     res.json(user);
   } catch (error) {
+    console.error('getProfile error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -74,58 +98,40 @@ export const updateProfile = async (req: any, res: Response) => {
     const { password, ...userWithoutPassword } = updatedUser;
     res.json(userWithoutPassword);
   } catch (error) {
+    console.error('updateProfile error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
-export const followUser = async (req: any, res: Response) => {
+/**
+ * GET /api/users/search?q=term
+ * Authenticated user search across name / industry / location.
+ * Powers the dashboard header search (Discover pre-filter).
+ */
+export const searchUsers = async (req: any, res: Response) => {
   try {
-    const { id: followingId } = req.params;
-    const followerId = req.user.id;
-
-    if (followerId === followingId) {
-      return res.status(400).json({ message: 'Cannot follow yourself' });
+    const q = (req.query.q as string || '').trim();
+    if (q.length < 2) {
+      return res.json({ users: [] });
     }
 
-    const existingFollow = await prisma.follow.findUnique({
-      where: { followerId_followingId: { followerId, followingId } },
-    });
-
-    if (existingFollow) {
-      await prisma.follow.delete({
-        where: { id: existingFollow.id },
-      });
-      return res.json({ message: 'Unfollowed' });
-    }
-
-    await prisma.follow.create({
-      data: { followerId, followingId },
-    });
-    res.json({ message: 'Followed' });
-  } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-// Public Entity Endpoints
-export const getCompanies = async (req: Request, res: Response) => {
-  try {
-    const companies = await prisma.company.findMany({
+    const users = await prisma.user.findMany({
+      where: {
+        id: { not: req.user.id },
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { industry: { contains: q, mode: 'insensitive' } },
+          { location: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, name: true, role: true, industry: true, location: true, avatar: true },
+      take: 8,
       orderBy: { name: 'asc' },
     });
-    res.json(companies);
-  } catch (error) {
-    res.status(500).json({ message: 'Internal server error' });
-  }
-};
 
-export const getInvestors = async (req: Request, res: Response) => {
-  try {
-    const investors = await prisma.investor.findMany({
-      orderBy: { name: 'asc' },
-    });
-    res.json(investors);
+    res.json({ users });
   } catch (error) {
+    console.error('searchUsers error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

@@ -31,11 +31,6 @@ export const createPost = async (req: any, res: Response) => {
   try {
     const { content, tag, metric, metricLabel, image, referencedCompanyId, referencedInvestorId } = postSchema.parse(req.body);
 
-    // Guest bypass — deny writes
-    if (req.user.id === 'guest-bypass-001') {
-      return res.status(403).json({ message: 'Guest mode: sign up to post deals' });
-    }
-
     const post = await prisma.post.create({
       data: {
         content,
@@ -54,14 +49,11 @@ export const createPost = async (req: any, res: Response) => {
         likes: { select: { userId: true } },
         comments: {
           include: { user: { select: { id: true, name: true, avatar: true } } },
+          take: 50,
+          orderBy: { createdAt: 'asc' },
         },
       },
     });
-
-    // Log analytics event
-    prisma.analyticsEvent.create({
-      data: { userId: req.user.id, eventType: 'POST_IMPRESSION', targetId: post.id },
-    }).catch(() => {});
 
     res.status(201).json(post);
   } catch (error) {
@@ -75,37 +67,41 @@ export const createPost = async (req: any, res: Response) => {
 
 export const getFeed = async (req: any, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
     const skip = (page - 1) * limit;
 
-    const posts = await prisma.post.findMany({
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        author: { select: { id: true, name: true, avatar: true, role: true, industry: true, location: true } },
-        referencedCompany: true,
-        referencedInvestor: true,
-        likes: { select: { userId: true } },
-        comments: {
-          include: { user: { select: { id: true, name: true, avatar: true } } },
-          take: 5,
-          orderBy: { createdAt: 'desc' },
+    const [posts, total] = await Promise.all([
+      prisma.post.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          author: { select: { id: true, name: true, avatar: true, role: true, industry: true, location: true } },
+          referencedCompany: true,
+          referencedInvestor: true,
+          likes: { select: { userId: true } },
+          comments: {
+            include: { user: { select: { id: true, name: true, avatar: true } } },
+            take: 50,
+            orderBy: { createdAt: 'asc' },
+          },
         },
-      },
+      }),
+      prisma.post.count(),
+    ]);
+
+    // True per-post comment totals (UI shows a capped preview + "view all").
+    const commentCounts = await prisma.comment.groupBy({
+      by: ['postId'],
+      where: { postId: { in: posts.map(p => p.id) } },
+      _count: { _all: true },
     });
+    const countByPost = new Map(commentCounts.map(c => [c.postId, c._count._all]));
 
-    const total = await prisma.post.count();
+    const shaped = posts.map(p => ({ ...p, commentsTotal: countByPost.get(p.id) ?? p.comments.length }));
 
-    // Log profile-view event if user is viewing the feed
-    if (req.user.id !== 'guest-bypass-001') {
-      prisma.analyticsEvent.create({
-        data: { userId: req.user.id, eventType: 'PROFILE_VIEW', targetId: null },
-      }).catch(() => {});
-    }
-
-    res.json({ posts, total, page, totalPages: Math.ceil(total / limit) });
+    res.json({ posts: shaped, total, page, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     console.error('getFeed error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -117,9 +113,11 @@ export const likePost = async (req: any, res: Response) => {
     const { postId } = req.params;
     const userId = req.user.id;
 
-    if (userId === 'guest-bypass-001') {
-      return res.status(403).json({ message: 'Sign up to like posts' });
-    }
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true },
+    });
+    if (!post) return res.status(404).json({ message: 'Post not found' });
 
     const existingLike = await prisma.like.findUnique({
       where: { userId_postId: { userId, postId } },
@@ -131,6 +129,19 @@ export const likePost = async (req: any, res: Response) => {
     }
 
     await prisma.like.create({ data: { userId, postId } });
+
+    // Notify the post author (never for self-likes).
+    if (post.authorId !== userId) {
+      prisma.notification.create({
+        data: {
+          receiverId: post.authorId,
+          type: 'NEW_LIKE',
+          message: `${req.user.name} liked your post.`,
+          referenceId: postId,
+        },
+      }).catch(() => {});
+    }
+
     res.json({ liked: true, message: 'Liked' });
   } catch (error) {
     console.error('likePost error:', error);
@@ -144,20 +155,32 @@ export const addComment = async (req: any, res: Response) => {
     const { content } = req.body;
     const userId = req.user.id;
 
-    if (!content?.trim()) {
-      return res.status(400).json({ message: 'Comment content is required' });
-    }
-    if (content.length > 2000) {
-      return res.status(400).json({ message: 'Comment is too long (max 2000 characters)' });
-    }
-    if (userId === 'guest-bypass-001') {
-      return res.status(403).json({ message: 'Sign up to comment' });
+    const zodParsed = z.string().trim().min(1, 'Comment content is required').max(2000).safeParse(content);
+    if (!zodParsed.success) {
+      return res.status(400).json({ message: zodParsed.error.issues[0]?.message || 'Invalid comment' });
     }
 
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true },
+    });
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
     const comment = await prisma.comment.create({
-      data: { content, userId, postId },
+      data: { content: zodParsed.data, userId, postId },
       include: { user: { select: { id: true, name: true, avatar: true } } },
     });
+
+    if (post.authorId !== userId) {
+      prisma.notification.create({
+        data: {
+          receiverId: post.authorId,
+          type: 'NEW_COMMENT',
+          message: `${req.user.name} commented on your post.`,
+          referenceId: postId,
+        },
+      }).catch(() => {});
+    }
 
     res.status(201).json(comment);
   } catch (error) {

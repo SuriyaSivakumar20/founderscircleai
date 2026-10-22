@@ -1,300 +1,554 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { LogoMark } from './Brand';
 
 interface LandingProps {
   onSignup: () => void;
   onLogin: () => void;
-  onDirectAccess: () => void;
+  /** Dev/demo deployments only — logs into the seeded guest account via the real API. */
+  onDirectAccess?: () => void;
+  /** Honest error surfaced when the demo account login fails. */
+  notice?: string;
 }
 
-const Navbar: React.FC<{ onLogin: () => void, onSignup: () => void }> = ({ onLogin, onSignup }) => {
-  const [scrolled, setScrolled] = useState(false);
+/* ═══ Hooks & micro-components ═══════════════════════════════ */
+
+/** Adds .is-visible to every .reveal element when it scrolls into view. */
+const useReveal = () => {
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>('.reveal'));
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(el => el.classList.add('is-visible'));
+      return;
+    }
+    const io = new IntersectionObserver(
+      entries => entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('is-visible');
+          io.unobserve(e.target);
+        }
+      }),
+      { threshold: 0.12 }
+    );
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+};
+
+/** Eased count-up that fires when the element enters the viewport. */
+const CountUp: React.FC<{ to: number; className?: string }> = ({ to, className }) => {
+  const [n, setN] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const el = ref.current;
+    if (!el || !('IntersectionObserver' in window)) { setN(to); return; }
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      io.disconnect();
+      const start = performance.now();
+      const dur = 1200;
+      const tick = (t: number) => {
+        const p = Math.min(1, (t - start) / dur);
+        setN(Math.round(to * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }, { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [to]);
+
+  return <span ref={ref} className={className}>{String(n).padStart(2, '0')}</span>;
+};
+
+/** Animated engine-signal bar (sector / stage / geo / ticket). */
+const SignalBar: React.FC<{ label: string; weight: number; width: number; delay: number }> = ({ label, weight, width, delay }) => {
+  const [on, setOn] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !('IntersectionObserver' in window)) { setOn(true); return; }
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setOn(true); io.disconnect(); }
+    }, { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
   }, []);
 
   return (
-    <nav className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white/80 dark:bg-[#0f172a]/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 shadow-sm' : 'bg-transparent'}`}>
-      <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30">FC</div>
-          <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">FoundersCircle</span>
-        </div>
-        
-        <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600 dark:text-gray-300">
-          <a href="#features" className="hover:text-blue-600 transition-colors">Features</a>
-          <a href="#network" className="hover:text-blue-600 transition-colors">Network</a>
-          <a href="#startups" className="hover:text-blue-600 transition-colors">Startups</a>
-          <a href="#investors" className="hover:text-blue-600 transition-colors">Investors</a>
-          <a href="#pricing" className="hover:text-blue-600 transition-colors">Pricing</a>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button onClick={onLogin} className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-blue-600 transition-colors">Sign In</button>
-          <button onClick={onSignup} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-all shadow-md shadow-blue-600/20 active:scale-95">Get Started</button>
-        </div>
+    <div ref={ref} className="group">
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{label}</span>
+        <span className="label-caps text-slate-400 group-hover:text-gold-500 transition-colors">{weight} pts</span>
       </div>
-    </nav>
+      <div className="h-[7px] rounded-full bg-slate-200 dark:bg-surface-2 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-700 bar-fill"
+          style={{ width: on ? `${width}%` : '0%', '--bar-delay': `${delay}ms` } as React.CSSProperties}
+        />
+      </div>
+    </div>
   );
 };
 
-const Landing: React.FC<LandingProps> = ({ onSignup, onLogin, onDirectAccess }) => {
+/** Score ring used in the hero artifact and engine cards. */
+const Ring: React.FC<{ score: number; size?: number; stroke?: number }> = ({ score, size = 84, stroke = 5 }) => {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const color = score >= 80 ? '#22A170' : score >= 60 ? '#48BA89' : '#D0A54F';
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b1120] text-gray-900 dark:text-gray-100 font-sans selection:bg-blue-200 dark:selection:bg-blue-900">
-      <Navbar onLogin={onLogin} onSignup={onSignup} />
-      
-      {/* 2. Hero Section */}
-      <section className="pt-32 pb-20 md:pt-48 md:pb-32 px-6 relative overflow-hidden">
-        {/* Decorative background blur */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/20 rounded-full blur-[120px] pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 rounded-full blur-[120px] pointer-events-none"></div>
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-slate-200 dark:text-surface-2" />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c - (score / 100) * c}
+          style={{ transition: 'stroke-dashoffset 1.6s cubic-bezier(0.16,1,0.3,1) 0.3s' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="font-mono font-semibold text-slate-900 dark:text-slate-50" style={{ fontSize: size * 0.26 }}>{score}</span>
+      </div>
+    </div>
+  );
+};
 
-        <div className="max-w-7xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold uppercase tracking-wider mb-8">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-            </span>
-            The #1 Platform for Founders & VCs
+/* ═══ Navigation ════════════════════════════════════════════ */
+
+const Nav: React.FC<{ onLogin: () => void; onSignup: () => void }> = ({ onLogin, onSignup }) => {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  return (
+    <header
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${
+        scrolled
+          ? 'bg-paper/80 dark:bg-surface-0/80 backdrop-blur-xl border-b border-slate-200/70 dark:border-white/5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
+          : 'bg-transparent border-b border-transparent'
+      }`}
+    >
+      <nav className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+        <a href="#" className="flex items-center gap-3 group">
+          <LogoMark size={38} className="transition-transform duration-500 group-hover:rotate-[-4deg] group-hover:scale-105" />
+          <div className="leading-none">
+            <span className="font-display text-lg font-semibold tracking-[0.02em] text-slate-900 dark:text-slate-50">B.I.R.D</span>
+            <span className="label-caps text-slate-400 block mt-[3px] text-[9px]">Private Capital Network</span>
           </div>
-          
-          <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 leading-tight text-slate-900 dark:text-white">
-            Where Startups Meet <br className="hidden md:block"/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Smart Capital.</span>
-          </h1>
-          
-          <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            An AI-powered professional ecosystem for startup discovery, investor matching, and growth intelligence. Build your network, raise funds, or deploy capital.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button onClick={onSignup} className="w-full sm:w-auto bg-blue-600 text-white px-8 py-4 rounded-xl font-medium text-lg hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2">
-              Start Free Trial
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-            </button>
-            <button onClick={onDirectAccess} className="w-full sm:w-auto bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-8 py-4 rounded-xl font-medium text-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm">
-              Explore Platform Demo
-            </button>
-          </div>
+        </a>
+
+        <div className="hidden md:flex items-center gap-9 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+          <a href="#protocol" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Protocol</a>
+          <a href="#engine" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Engine</a>
+          <a href="#access" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Access</a>
         </div>
 
-        {/* Hero Dashboard Preview */}
-        <div className="mt-20 max-w-6xl mx-auto relative rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f172a] shadow-2xl overflow-hidden translate-y-4 hover:translate-y-0 transition-transform duration-700 ease-out">
-          <div className="h-12 border-b border-slate-100 dark:border-slate-800 flex items-center px-4 gap-2 bg-slate-50 dark:bg-[#1e293b]">
-            <div className="w-3 h-3 rounded-full bg-red-400"></div>
-            <div className="w-3 h-3 rounded-full bg-amber-400"></div>
-            <div className="w-3 h-3 rounded-full bg-green-400"></div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onLogin}
+            className="hidden sm:block text-[13px] font-semibold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-3 py-2"
+          >
+            Sign in
+          </button>
+          <button
+            onClick={onSignup}
+            className="btn-shine text-[13px] font-bold bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 px-5 py-2.5 rounded-full hover:shadow-lg hover:shadow-blue-600/20 hover:-translate-y-px active:translate-y-0 transition-all duration-300"
+          >
+            Request access
+          </button>
+        </div>
+      </nav>
+    </header>
+  );
+}
+
+/* ═══ Landing ═══════════════════════════════════════════════ */
+
+const Landing: React.FC<LandingProps> = ({ onSignup, onLogin, onDirectAccess, notice }) => {
+  useReveal();
+
+  // Cursor parallax for the hero artifact
+  const [ptr, setPtr] = useState({ x: 0, y: 0 });
+  const onHeroMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPtr({ x: (e.clientX - r.left) / r.width - 0.5, y: (e.clientY - r.top) / r.height - 0.5 });
+  }, []);
+
+  const ALLOCATORS = ['Peak XV', 'Blume', 'Accel', 'Elevation', 'Lightspeed', 'Z47', 'Matrix', 'Chiratae', 'Titan Capital', 'Omidyar'];
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-surface-0 text-slate-900 dark:text-slate-100 selection:bg-blue-200 dark:selection:bg-blue-900 overflow-x-hidden">
+
+      <Nav onLogin={onLogin} onSignup={onSignup} />
+
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <section onMouseMove={onHeroMove} className="relative pt-36 md:pt-44 pb-24 md:pb-32 px-6 noise-overlay">
+        {/* Atmosphere */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[560px] bg-[radial-gradient(ellipse,rgba(34,161,112,0.14),transparent_65%)] dark:bg-[radial-gradient(ellipse,rgba(34,161,112,0.16),transparent_65%)]" />
+          <div className="absolute top-24 right-[8%] w-[380px] h-[380px] bg-[radial-gradient(circle,rgba(208,165,79,0.10),transparent_65%)] rounded-full blur-2xl" />
+          <div className="absolute inset-0 bg-grid-fade opacity-70" />
+        </div>
+
+        <div className="max-w-6xl mx-auto relative z-10 grid lg:grid-cols-[1.05fr_0.95fr] gap-16 lg:gap-10 items-center">
+          {/* Copy column */}
+          <div className="text-center lg:text-left">
+            <div className="reveal inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] backdrop-blur-sm mb-8">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inset-0 rounded-full bg-blue-500 animate-halo" />
+                <span className="relative rounded-full h-2 w-2 bg-blue-500" />
+              </span>
+              <span className="label-caps text-slate-500 dark:text-slate-400">Invite-only · AI-vetted dealflow</span>
+            </div>
+
+            <h1
+              className="reveal font-display text-[3.1rem] leading-[1.04] sm:text-7xl xl:text-[5.2rem] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-50 mb-7"
+              style={{ '--reveal-delay': '80ms' } as React.CSSProperties}
+            >
+              Capital, meets
+              <br />
+              <em className="display-italic text-gold-gradient not-italic font-normal" style={{ fontStyle: 'italic' }}>conviction.</em>
+            </h1>
+
+            <p
+              className="reveal text-lg leading-relaxed text-slate-500 dark:text-slate-400 max-w-xl mx-auto lg:mx-0 mb-10"
+              style={{ '--reveal-delay': '180ms' } as React.CSSProperties}
+            >
+              A private protocol where founders are interviewed by AI analysts, scored across five
+              dimensions, and introduced only to capital that actually fits. No spray. No pray.
+            </p>
+
+            <div
+              className="reveal flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 mb-10"
+              style={{ '--reveal-delay': '280ms' } as React.CSSProperties}
+            >
+              <button
+                onClick={onSignup}
+                className="btn-shine w-full sm:w-auto group bg-blue-600 text-white px-8 py-4 rounded-full font-bold text-[15px] hover:bg-blue-700 shadow-xl shadow-blue-600/25 hover:shadow-blue-600/35 hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                Request access
+                <svg className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+              {onDirectAccess && (
+                <button
+                  onClick={onDirectAccess}
+                  className="w-full sm:w-auto px-8 py-4 rounded-full font-semibold text-[15px] border border-slate-300 dark:border-white/15 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-white/30 hover:bg-white/70 dark:hover:bg-white/[0.04] backdrop-blur-sm transition-all duration-300"
+                >
+                  Enter the demo
+                </button>
+              )}
+            </div>
+
+            {notice && (
+              <p className="reveal text-[13px] text-red-600 dark:text-red-400 font-semibold mt-3" style={{ '--reveal-delay': '300ms' } as React.CSSProperties}>
+                {notice}
+              </p>
+            )}
+
+            <p className="reveal text-[13px] text-slate-400 dark:text-slate-500" style={{ '--reveal-delay': '360ms' } as React.CSSProperties}>
+              For founders raising <span className="font-mono text-slate-500 dark:text-slate-400">₹5–50 Cr</span>
+              <span className="mx-2 text-slate-300 dark:text-slate-700">·</span>
+              For funds deploying <span className="font-mono text-slate-500 dark:text-slate-400">₹2–100 Cr</span>
+              <span className="mx-2 text-slate-300 dark:text-slate-700">·</span>
+              <button onClick={onLogin} className="text-blue-600 dark:text-blue-400 font-semibold hover:underline underline-offset-4">Already admitted? Sign in</button>
+            </p>
           </div>
-          <div className="p-2 md:p-8 flex gap-6 opacity-80 pointer-events-none">
-             <div className="hidden md:flex flex-col w-64 gap-4 border-r border-slate-100 dark:border-slate-800 pr-6">
-                <div className="h-4 w-24 bg-slate-200 dark:bg-slate-700 rounded mb-4"></div>
-                <div className="h-8 w-full bg-blue-50 dark:bg-blue-900/40 rounded-lg"></div>
-                <div className="h-8 w-full bg-slate-100 dark:bg-slate-800 rounded-lg"></div>
-                <div className="h-8 w-full bg-slate-100 dark:bg-slate-800 rounded-lg"></div>
-             </div>
-             <div className="flex-1 flex flex-col gap-6">
-                <div className="h-10 w-full bg-slate-100 dark:bg-slate-800 rounded-xl"></div>
-                <div className="flex gap-4">
-                  <div className="flex-1 h-32 bg-slate-100 dark:bg-slate-800 rounded-xl"></div>
-                  <div className="flex-1 h-32 bg-slate-100 dark:bg-slate-800 rounded-xl"></div>
-                  <div className="flex-1 h-32 pl bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800"></div>
+
+          {/* Artifact column — the product, alive */}
+          <div
+            className="relative mx-auto w-full max-w-[420px] lg:max-w-none"
+            style={{ transform: `translate3d(${ptr.x * 12}px, ${ptr.y * 9}px, 0)`, transition: 'transform 0.4s cubic-bezier(0.22,1,0.36,1)' }}
+          >
+            {/* Main diagnostic card */}
+            <div className="reveal card-elevated hairline-gold bg-white dark:bg-surface-1 border border-slate-200 dark:border-white/[0.06] rounded-[22px] p-7 relative z-10" style={{ '--reveal-delay': '220ms' } as React.CSSProperties}>
+              <div className="flex items-center justify-between mb-6">
+                <span className="label-caps text-slate-400">AI Diagnostic · Live</span>
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inset-0 rounded-full bg-blue-500 animate-halo" />
+                    <span className="relative rounded-full h-1.5 w-1.5 bg-blue-500" />
+                  </span>
+                  ANALYZING
+                </span>
+              </div>
+
+              <div className="flex items-center gap-6 mb-7">
+                <Ring score={84} size={92} />
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[11px] font-bold tracking-wide uppercase mb-2">
+                    ✓ Admitted
+                  </div>
+                  <p className="font-display text-[17px] leading-snug text-slate-900 dark:text-slate-100">
+                    “Defensible moat. Sharp ICP.<br />Raise readiness confirmed.”
+                  </p>
                 </div>
-                <div className="h-64 w-full bg-slate-50 dark:bg-[#1e293b] rounded-xl border border-slate-100 dark:border-slate-800"></div>
-             </div>
+              </div>
+
+              <div className="space-y-3.5">
+                {[
+                  { l: 'Differentiation', v: 17 },
+                  { l: 'Competitive positioning', v: 16 },
+                  { l: 'Business viability', v: 18 },
+                  { l: 'Strategy clarity', v: 16 },
+                ].map((d, i) => (
+                  <div key={d.l} className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 w-44 shrink-0">{d.l}</span>
+                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-surface-2 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-600 bar-fill" style={{ width: '0%', '--bar-delay': `${600 + i * 140}ms` } as React.CSSProperties} data-w={`${(d.v / 20) * 100}%`} ref={el => { if (el) requestAnimationFrame(() => { const p = el as HTMLElement; p.style.width = p.dataset.w || '0%'; }); }} />
+                    </div>
+                    <span className="font-mono text-xs text-slate-600 dark:text-slate-300 w-10 text-right">{d.v}/20</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Floating match chip */}
+            <div
+              className="reveal animate-floaty absolute -left-4 sm:-left-10 bottom-[-28px] z-20 bg-white dark:bg-surface-2 border border-slate-200 dark:border-white/[0.07] rounded-2xl px-4 py-3 shadow-xl flex items-center gap-3"
+              style={{ '--reveal-delay': '520ms' } as React.CSSProperties}
+            >
+              <Ring score={92} size={44} stroke={3.5} />
+              <div>
+                <p className="text-[12px] font-bold text-slate-900 dark:text-slate-100 leading-tight">Aarna ⟷ Peak Ventures</p>
+                <p className="label-caps text-[9px] text-blue-600 dark:text-blue-400 mt-1">High match · Fintech-adjacent</p>
+              </div>
+            </div>
+
+            {/* Floating connection chip */}
+            <div
+              className="reveal animate-floaty-slow absolute -right-3 sm:-right-8 top-[-24px] z-20 bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 rounded-2xl px-4 py-2.5 shadow-2xl flex items-center gap-2.5"
+              style={{ '--reveal-delay': '640ms' } as React.CSSProperties}
+            >
+              <span className="w-6 h-6 rounded-full bg-blue-500/90 flex items-center justify-center text-[11px]">✓</span>
+              <span className="text-[12px] font-semibold">Kavya R. accepted your request</span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 3. Stats Section */}
-      <section className="py-16 border-y border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f172a]">
-        <div className="max-w-7xl mx-auto px-6">
-          <p className="text-center text-sm font-semibold uppercase tracking-widest text-slate-500 mb-10">Trusted by leading funds & founders</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center divide-x divide-slate-100 dark:divide-slate-800">
-            <div>
-              <div className="text-4xl font-extrabold text-blue-600 mb-2">10K+</div>
-              <div className="text-sm text-slate-500 font-medium">Verified Startups</div>
-            </div>
-            <div>
-              <div className="text-4xl font-extrabold text-blue-600 mb-2">2K+</div>
-              <div className="text-sm text-slate-500 font-medium">Active Investors</div>
-            </div>
-            <div>
-              <div className="text-4xl font-extrabold text-blue-600 mb-2">₹500Cr+</div>
-              <div className="text-sm text-slate-500 font-medium">Opportunities Mapped</div>
-            </div>
-            <div>
-              <div className="text-4xl font-extrabold text-blue-600 mb-2">95%</div>
-              <div className="text-sm text-slate-500 font-medium">Match Accuracy</div>
-            </div>
+      {/* ── Allocator marquee ────────────────────────────────── */}
+      <section className="py-10 border-y border-slate-200/80 dark:border-white/5 bg-white/50 dark:bg-surface-1/50 marquee-mask">
+        <div className="max-w-6xl mx-auto px-6 mb-5">
+          <p className="label-caps text-slate-400 text-center">Allocators in the room</p>
+        </div>
+        <div className="overflow-hidden">
+          <div className="marquee-track">
+            {[...ALLOCATORS, ...ALLOCATORS].map((name, i) => (
+              <span key={i} className="mx-8 md:mx-12 font-display text-xl md:text-2xl font-medium text-slate-300 dark:text-slate-700 hover:text-slate-500 dark:hover:text-slate-500 transition-colors duration-300 whitespace-nowrap">
+                {name}
+              </span>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* 4. Platform Features Grid */}
-      <section id="features" className="py-24 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white">Everything you need to scale</h2>
-            <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">A comprehensive suite of tools designed specifically for the venture asset class.</p>
+      {/* ── Stats band ───────────────────────────────────────── */}
+      <section className="py-16 md:py-20 px-6">
+        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-slate-200 dark:divide-white/5">
+          {[
+            { n: 5, label: 'Dimensions scored', sub: 'per interview' },
+            { n: 100, label: 'Point engine', sub: 'fully explainable' },
+            { n: 4, label: 'Weighted signals', sub: 'sector·stage·geo·ticket' },
+            { n: 5, label: 'Minute verdict', sub: 'interview to decision' },
+          ].map((s, i) => (
+            <div key={i} className="reveal text-center px-4" style={{ '--reveal-delay': `${i * 90}ms` } as React.CSSProperties}>
+              <div className="font-mono text-4xl md:text-5xl font-semibold text-slate-900 dark:text-slate-50 mb-2">
+                <CountUp to={s.n} />
+              </div>
+              <p className="text-[13px] font-bold text-slate-700 dark:text-slate-300">{s.label}</p>
+              <p className="label-caps text-[9px] text-slate-400 mt-1">{s.sub}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── The Protocol ─────────────────────────────────────── */}
+      <section id="protocol" className="py-24 md:py-32 px-6 relative">
+        <div className="max-w-6xl mx-auto">
+          <div className="max-w-2xl mb-16 md:mb-20">
+            <p className="reveal label-caps text-blue-600 dark:text-blue-400 mb-4">The Protocol</p>
+            <h2 className="reveal font-display text-4xl md:text-[3.4rem] leading-[1.08] font-semibold tracking-tight text-slate-900 dark:text-slate-50 mb-5" style={{ '--reveal-delay': '80ms' } as React.CSSProperties}>
+              Admission is earned,<br /><em className="display-italic text-gold-gradient" style={{ fontStyle: 'italic' }}>not bought.</em>
+            </h2>
+            <p className="reveal text-lg text-slate-500 dark:text-slate-400 leading-relaxed" style={{ '--reveal-delay': '160ms' } as React.CSSProperties}>
+              Every member faces the same five questions. The same rubric. The same public score.
+              The door is narrow by design.
+            </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-5">
             {[
-              { title: 'Intelligent Matching', icon: 'M13 10V3L4 14h7v7l9-11h-7z', desc: 'Our AI analyzes over 50 data points to connect founders with the investors most likely to fund them.' },
-              { title: 'Rich Profiles', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', desc: 'Showcase business metrics, traction, and team backgrounds with beautiful, standardized profile pages.' },
-              { title: 'Smart Analytics', icon: 'M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z', desc: 'Track profile views, engagement metrics, and investor interest over time from an intuitive dashboard.' },
-              { title: 'Due Diligence Insights', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z', desc: 'Access standardized data rooms and streamline your diligence process with verified company metrics.' },
-              { title: 'Secure Messaging', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', desc: 'Communicate directly with matched counterparts through our secure, integrated messaging platform.' },
-              { title: 'Deal Flow CRM', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16', desc: 'Manage your pipeline, track conversations, and move deals forward using built-in CRM capabilities.' }
-            ].map((f, i) => (
-              <div key={i} className="p-8 rounded-2xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 hover:shadow-lg hover:border-blue-500/50 transition-all group">
-                <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={f.icon} /></svg>
+              {
+                n: '01', t: 'The Interview',
+                d: 'An AI analyst — briefed on India\'s most recent benchmark companies — probes your thesis for five rounds. Founders get challenged on their moat. Investors on their edge.',
+                icon: <path strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />,
+              },
+              {
+                n: '02', t: 'The Diagnostic',
+                d: 'Five dimensions, scored out of twenty: differentiation, positioning, viability, strategy, innovation. ≥70 admits you. The full report is yours either way.',
+                icon: <path strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+              },
+              {
+                n: '03', t: 'The Room',
+                d: 'Introductions are scored on sector, stage, geography and ticket size — then held behind an accept gate. Messaging unlocks only on a mutual yes.',
+                icon: <path strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />,
+              },
+            ].map((s, i) => (
+              <div
+                key={s.n}
+                className="reveal group relative bg-white dark:bg-surface-1 border border-slate-200 dark:border-white/[0.06] rounded-[20px] p-8 hover:border-blue-300 dark:hover:border-blue-800/60 hover:shadow-xl hover:shadow-blue-600/5 hover:-translate-y-1 transition-all duration-400"
+                style={{ '--reveal-delay': `${i * 120}ms` } as React.CSSProperties}
+              >
+                <div className="flex items-center justify-between mb-8">
+                  <span className="font-mono text-[13px] font-semibold text-gold-500 tracking-widest">{s.n}</span>
+                  <svg className="w-6 h-6 text-slate-300 dark:text-slate-700 group-hover:text-blue-500 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    {s.icon}
+                  </svg>
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-slate-900 dark:text-white">{f.title}</h3>
-                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">{f.desc}</p>
+                <h3 className="font-display text-[22px] font-semibold text-slate-900 dark:text-slate-50 mb-3">{s.t}</h3>
+                <p className="text-[14px] leading-relaxed text-slate-500 dark:text-slate-400">{s.d}</p>
+                <div className="mt-7 h-px w-full bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* 5. How It Works */}
-      <section className="py-24 bg-slate-50 dark:bg-[#0b1120] px-6">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white">How it works</h2>
-            <p className="text-lg text-slate-600 dark:text-slate-400">Join the ecosystem and start extracting value in minutes.</p>
+      {/* ── The Engine ───────────────────────────────────────── */}
+      <section id="engine" className="py-24 md:py-32 px-6 bg-white/60 dark:bg-surface-1/60 border-y border-slate-200/80 dark:border-white/5 relative noise-overlay">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-center relative z-10">
+          <div>
+            <p className="reveal label-caps text-blue-600 dark:text-blue-400 mb-4">The Matching Engine</p>
+            <h2 className="reveal font-display text-4xl md:text-[3.2rem] leading-[1.08] font-semibold tracking-tight text-slate-900 dark:text-slate-50 mb-5" style={{ '--reveal-delay': '80ms' } as React.CSSProperties}>
+              Deterministic.<br />Explainable.<em className="display-italic text-gold-gradient" style={{ fontStyle: 'italic' }}> Boringly fair.</em>
+            </h2>
+            <p className="reveal text-lg text-slate-500 dark:text-slate-400 leading-relaxed mb-10" style={{ '--reveal-delay': '160ms' } as React.CSSProperties}>
+              No black box, no LLM lottery. Every introduction carries a score you can
+              decompose — so you always know why you were matched, and what to fix if you weren't.
+            </p>
+
+            <div className="reveal space-y-6 max-w-md" style={{ '--reveal-delay': '240ms' } as React.CSSProperties}>
+              <SignalBar label="Sector alignment" weight={40} width={92} delay={100} />
+              <SignalBar label="Stage compatibility" weight={30} width={70} delay={250} />
+              <SignalBar label="Geography" weight={15} width={38} delay={400} />
+              <SignalBar label="Ticket fit" weight={15} width={34} delay={550} />
+            </div>
           </div>
-          <div className="flex flex-col md:flex-row gap-12 relative">
-            <div className="hidden md:block absolute top-[45px] left-[10%] right-[10%] h-[2px] bg-slate-200 dark:bg-slate-800 -z-0"></div>
-            {[
-              { num: '01', title: 'Create Profile', desc: 'Sign up and build a rich profile highlighting your thesis or company metrics.' },
-              { num: '02', title: 'Get Matched', desc: 'Our AI engine surfaces high-intent connections aligned with your specific goals.' },
-              { num: '03', title: 'Connect & Close', desc: 'Reach out, manage diligence, and close deals directly on the platform.' }
-            ].map((step, i) => (
-              <div key={i} className="flex-1 text-center relative z-10">
-                <div className="w-24 h-24 mx-auto bg-white dark:bg-[#0f172a] rounded-full border-4 border-slate-50 dark:border-[#0b1120] flex items-center justify-center shadow-lg mb-6 text-2xl font-bold text-blue-600 relative">
-                   {step.num}
-                   <div className="absolute inset-0 rounded-full border-2 border-slate-100 dark:border-slate-800 pointer-events-none"></div>
+
+          {/* Stacked mock match cards */}
+          <div className="relative mx-auto w-full max-w-md" style={{ transform: `translate3d(${ptr.x * -10}px, ${ptr.y * -8}px, 0)`, transition: 'transform 0.5s cubic-bezier(0.22,1,0.36,1)' }}>
+            <div className="reveal absolute inset-x-6 -top-6 bottom-10 bg-slate-100 dark:bg-surface-2 rounded-[22px] border border-slate-200 dark:border-white/5 rotate-2" style={{ '--reveal-delay': '200ms' } as React.CSSProperties} />
+            <div className="reveal relative bg-white dark:bg-surface-1 border border-slate-200 dark:border-white/[0.07] rounded-[22px] p-7 card-elevated" style={{ '--reveal-delay': '320ms' } as React.CSSProperties}>
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-display text-xl font-semibold shadow-lg shadow-blue-600/20">A</div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 dark:text-slate-50 text-[15px]">Aarna</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">9K gold jewellery · Seed · Bengaluru</p>
+                  </div>
                 </div>
-                <h3 className="text-xl font-bold mb-2 text-slate-900 dark:text-white">{step.title}</h3>
-                <p className="text-slate-600 dark:text-slate-400 text-sm">{step.desc}</p>
+                <Ring score={87} size={58} stroke={4} />
               </div>
-            ))}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {['Consumer', 'D2C', 'Trust-tech'].map(t => (
+                  <span key={t} className="px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[11px] font-semibold">{t}</span>
+                ))}
+              </div>
+              <div className="grid grid-cols-3 gap-3 mb-6">
+                {[
+                  { k: 'Raising', v: '₹10 Cr' },
+                  { k: 'Team', v: '14' },
+                  { k: 'ARR', v: '₹4.2 Cr' },
+                ].map(m => (
+                  <div key={m.k} className="bg-slate-50 dark:bg-surface-2 rounded-xl p-3 text-center border border-slate-100 dark:border-white/5">
+                    <p className="font-mono text-[15px] font-semibold text-slate-900 dark:text-slate-100">{m.v}</p>
+                    <p className="label-caps text-[8px] text-slate-400 mt-1">{m.k}</p>
+                  </div>
+                ))}
+              </div>
+              <button className="btn-shine w-full py-3 rounded-xl bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 font-bold text-[13px] hover:opacity-90 transition-opacity">
+                Request introduction
+              </button>
+              <p className="label-caps text-[8px] text-slate-400 text-center mt-3">Gated · unlocks on mutual accept</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 7. Testimonials */}
-      <section className="py-24 px-6 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f172a]">
-        <div className="max-w-7xl mx-auto">
-           <h2 className="text-3xl md:text-4xl font-bold mb-12 text-center text-slate-900 dark:text-white">Trusted by the ecosystem</h2>
-           <div className="grid md:grid-cols-2 gap-8">
-              <div className="p-8 rounded-2xl bg-slate-50 dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700">
-                <div className="flex gap-2 text-amber-400 mb-6">
-                  {Array(5).fill(0).map((_, i) => <svg key={i} className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>)}
-                </div>
-                <p className="text-lg text-slate-700 dark:text-slate-300 italic mb-8">"FoundersCircle cut our deal sourcing time in half. The quality of matches and the clarity of data presented is unmatched by traditional networks."</p>
-                <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">AK</div>
-                   <div>
-                      <div className="font-bold text-slate-900 dark:text-white">Arjun Kumar</div>
-                      <div className="text-xs text-slate-500">Partner at Nexus Ventures</div>
-                   </div>
-                </div>
-              </div>
-              <div className="p-8 rounded-2xl bg-slate-50 dark:bg-[#1e293b] border border-slate-200 dark:border-slate-700">
-                <div className="flex gap-2 text-amber-400 mb-6">
-                  {Array(5).fill(0).map((_, i) => <svg key={i} className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>)}
-                </div>
-                <p className="text-lg text-slate-700 dark:text-slate-300 italic mb-8">"We raised our $2M Seed round entirely through connections made on FoundersCircle. The platform makes you look professional and enterprise-ready."</p>
-                <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold">SR</div>
-                   <div>
-                      <div className="font-bold text-slate-900 dark:text-white">Simran Rawat</div>
-                      <div className="text-xs text-slate-500">CEO, CloudCompute AI</div>
-                   </div>
-                </div>
-              </div>
-           </div>
+      {/* ── Pull quote ───────────────────────────────────────── */}
+      <section className="py-28 px-6">
+        <div className="max-w-3xl mx-auto text-center">
+          <p className="reveal label-caps text-slate-400 mb-8">The B.I.R.D thesis</p>
+          <blockquote className="reveal font-display text-[1.9rem] md:text-[2.7rem] leading-[1.25] font-normal text-slate-900 dark:text-slate-100 tracking-tight" style={{ '--reveal-delay': '100ms' } as React.CSSProperties}>
+            “Deal flow is easy to find.{' '}
+            <em className="display-italic text-gold-gradient" style={{ fontStyle: 'italic' }}>Conviction is not.</em>{' '}
+            So we score for it.”
+          </blockquote>
+          <div className="reveal flex items-center justify-center gap-3 mt-10" style={{ '--reveal-delay': '200ms' } as React.CSSProperties}>
+            <LogoMark size={30} />
+            <span className="label-caps text-slate-400">B.I.R.D · Est. 2026</span>
+          </div>
         </div>
       </section>
 
-      {/* 8. Pricing Section */}
-      <section id="pricing" className="py-24 bg-slate-50 dark:bg-[#0b1120] px-6">
-         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold mb-4 text-slate-900 dark:text-white">Simple, transparent pricing</h2>
-            <p className="text-lg text-slate-600 dark:text-slate-400">Choose the plan that fits your growth stage.</p>
+      {/* ── CTA ──────────────────────────────────────────────── */}
+      <section id="access" className="px-6 pb-28">
+        <div className="max-w-5xl mx-auto reveal relative overflow-hidden rounded-[28px] bg-slate-900 dark:bg-surface-1 border border-slate-800 dark:border-white/[0.07] noise-overlay">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[700px] h-[380px] bg-[radial-gradient(ellipse,rgba(34,161,112,0.22),transparent_65%)]" />
+            <div className="absolute bottom-[-140px] right-[-80px] w-[340px] h-[340px] bg-[radial-gradient(circle,rgba(208,165,79,0.12),transparent_65%)] rounded-full" />
           </div>
-          
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-             {/* Free Tier */}
-             <div className="p-8 rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 text-center flex flex-col">
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Starter</h3>
-                <p className="text-slate-500 mb-6 text-sm">Perfect for early stage startups.</p>
-                <div className="mb-6"><span className="text-4xl font-extrabold text-slate-900 dark:text-white">₹0</span><span className="text-slate-500">/mo</span></div>
-                <ul className="text-left space-y-4 mb-8 flex-1 text-sm text-slate-600 dark:text-slate-400">
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Basic Profile</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> 5 Connections / month</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Standard Support</li>
-                </ul>
-                <button onClick={onSignup} className="w-full py-3 rounded-xl font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 transition-colors">Get Started</button>
-             </div>
-             
-             {/* Pro Tier */}
-             <div className="p-8 rounded-3xl bg-blue-600 text-white border border-blue-500 text-center shadow-xl shadow-blue-500/20 relative flex flex-col transform md:-translate-y-4">
-                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-blue-800 text-xs font-bold px-3 py-1 rounded-full text-blue-100">MOST POPULAR</div>
-                <h3 className="text-xl font-bold mb-2">Professional</h3>
-                <p className="text-blue-100 mb-6 text-sm">For active fundraising & networking.</p>
-                <div className="mb-6"><span className="text-4xl font-extrabold">₹4999</span><span className="text-blue-200">/mo</span></div>
-                <ul className="text-left space-y-4 mb-8 flex-1 text-sm text-blue-100">
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Verified Badge</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Unlimited Connections</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Priority Matching Algorithm</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Analytics Dashboard</li>
-                </ul>
-                <button onClick={onSignup} className="w-full py-3 rounded-xl font-medium text-blue-600 bg-white hover:bg-gray-50 transition-colors shadow-lg">Upgrade to Pro</button>
-             </div>
 
-             {/* Enterprise Tier */}
-             <div className="p-8 rounded-3xl bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 text-center flex flex-col">
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Institutional</h3>
-                <p className="text-slate-500 mb-6 text-sm">Custom solutions for VC & PE firms.</p>
-                <div className="mb-6 text-4xl font-extrabold text-slate-900 dark:text-white">Custom</div>
-                <ul className="text-left space-y-4 mb-8 flex-1 text-sm text-slate-600 dark:text-slate-400">
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Team Accounts</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> API Access</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Data Room Integrations</li>
-                   <li className="flex items-center gap-3"><svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Dedicated Success Manager</li>
-                </ul>
-                <button onClick={onSignup} className="w-full py-3 rounded-xl font-medium text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Contact Sales</button>
-             </div>
+          <div className="relative z-10 px-8 py-16 md:px-16 md:py-20 text-center">
+            <p className="label-caps text-gold-400 mb-5">Access</p>
+            <h2 className="font-display text-4xl md:text-[3.4rem] leading-[1.08] font-semibold tracking-tight text-white mb-5">
+              Five questions stand<br />between you and the room.
+            </h2>
+            <p className="text-slate-400 text-lg max-w-xl mx-auto mb-10 leading-relaxed">
+              Take the interview. Get scored. If the verdict is conviction — the room opens.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
+              <button
+                onClick={onSignup}
+                className="btn-shine bg-blue-500 hover:bg-blue-400 text-slate-950 px-9 py-4 rounded-full font-bold text-[15px] shadow-xl shadow-blue-600/25 hover:-translate-y-0.5 transition-all duration-300"
+              >
+                Begin the interview
+              </button>
+              {onDirectAccess && (
+                <button
+                  onClick={onDirectAccess}
+                  className="px-9 py-4 rounded-full font-semibold text-[15px] text-slate-300 border border-white/15 hover:border-white/35 hover:bg-white/5 transition-all duration-300"
+                >
+                  Look around first
+                </button>
+              )}
+            </div>
           </div>
-         </div>
+        </div>
       </section>
 
-      {/* 9. Footer */}
-      <footer className="py-12 bg-white dark:bg-[#0b1120] border-t border-slate-200 dark:border-slate-800 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-			<div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-xs">FC</div>
-            <span className="font-bold text-lg tracking-tight text-slate-900 dark:text-white">FoundersCircle</span>
+      {/* ── Footer ───────────────────────────────────────────── */}
+      <footer className="border-t border-slate-200 dark:border-white/5 px-6 py-12">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+          <div className="flex items-center gap-3">
+            <LogoMark size={32} />
+            <span className="font-display text-base font-semibold text-slate-900 dark:text-slate-50">B.I.R.D</span>
+            <span className="label-caps text-slate-400 hidden sm:inline">Business Intelligence &amp; Resource Development</span>
           </div>
-          <div className="flex gap-6 text-sm text-slate-500">
-            <a href="#" className="hover:text-blue-600 transition-colors">Platform</a>
-            <a href="#" className="hover:text-blue-600 transition-colors">About</a>
-            <a href="#" className="hover:text-blue-600 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-blue-600 transition-colors">Terms</a>
+          <div className="flex gap-8 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+            <a href="#protocol" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Protocol</a>
+            <a href="#engine" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Engine</a>
+            <a href="#access" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Access</a>
+            <button onClick={onLogin} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Sign in</button>
           </div>
-          <div className="text-sm text-slate-400">
-            &copy; 2025 FoundersCircle Inc. All rights reserved.
-          </div>
+          <p className="label-caps text-slate-400 text-[9px]">© 2026 · Demo project</p>
         </div>
       </footer>
     </div>

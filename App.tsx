@@ -7,12 +7,18 @@ import {
   useNavigate,
 } from 'react-router-dom';
 import { User } from './types';
+import { EvaluationResult } from './services/geminiService';
 import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
 import Auth from './components/Auth';
 import Landing from './components/Landing';
 import Login from './components/Login';
 import { apiService } from './services/apiService';
+
+// Demo mode is only offered where the seeded guest account exists:
+// local dev, or deployments that explicitly opt in with VITE_SHOW_DEMO=true.
+const DEMO_AVAILABLE =
+  import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO === 'true';
 
 // ── Protected guard ──────────────────────────
 const RequireAuth: React.FC<{ user: User | null; children: React.ReactNode }> = ({ user, children }) => {
@@ -23,33 +29,17 @@ const RequireAuth: React.FC<{ user: User | null; children: React.ReactNode }> = 
 // ── Inner app with router hooks ───────────────
 const AppRoutes: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [onboardingScore, setOnboardingScore] = useState<number | null>(null);
+  const [vetting, setVetting] = useState<EvaluationResult | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
+  const [demoError, setDemoError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Check for guest bypass in sessionStorage first.
-      // SECURITY: sessionStorage is attacker-writable (e.g. via devtools or an
-      // XSS sink), so only accept the exact known guest identity — a forged
-      // payload with role:'ADMIN' or a real user's id must be discarded.
-      const guestData = sessionStorage.getItem('fc_guest_user');
-      if (guestData) {
-        try {
-          const guest = JSON.parse(guestData);
-          if (guest?.id === 'guest-bypass-001' && guest?.role === 'FOUNDER') {
-            setUser(guest as User);
-            setAuthChecked(true);
-            return;
-          }
-        } catch { /* fall through to token auth */ }
-        sessionStorage.removeItem('fc_guest_user');
-      }
-
+      // Real token auth only — there is no client-side identity bypass.
       const token = localStorage.getItem('founders_circle_token');
       if (token) {
-
         try {
           const userData = await apiService.getMe();
           setUser(userData);
@@ -76,26 +66,27 @@ const AppRoutes: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('founders_circle_token');
-    sessionStorage.removeItem('fc_guest_user');
     setUser(null);
-    setOnboardingScore(null);
+    setVetting(null);
     navigate('/');
   };
 
-  const handleDirectAccess = () => {
-    const guestUser: User = {
-      id: 'guest-bypass-001',
-      email: 'guest@founderscircle.ai',
-      role: 'FOUNDER',
-      name: 'Guest VIP',
-      industry: 'Cross-Domain',
-      description: 'Platform guest enjoying direct immediate access.',
-      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=vipguest',
-      createdAt: new Date().toISOString(),
-    };
-    sessionStorage.setItem('fc_guest_user', JSON.stringify(guestUser));
-    setUser(guestUser);
-    navigate('/dashboard/feed');
+  const handleDirectAccess = async () => {
+    // Demo mode logs into the seeded guest@bird.ai account through the REAL
+    // API — every dashboard call afterwards is authenticated and truthful.
+    setDemoError('');
+    try {
+      const data = await apiService.login({ email: 'guest@bird.ai', password: 'password123' });
+      setUser(data.user);
+      navigate('/dashboard/feed');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message;
+      setDemoError(
+        msg
+          ? `Demo account unavailable: ${msg}`
+          : 'Demo account unavailable on this deployment. Create your own profile instead.'
+      );
+    }
   };
 
   if (!authChecked) return null;
@@ -111,7 +102,8 @@ const AppRoutes: React.FC = () => {
             : <Landing
               onSignup={() => navigate('/onboarding')}
               onLogin={() => navigate('/login')}
-              onDirectAccess={handleDirectAccess}
+              onDirectAccess={DEMO_AVAILABLE ? handleDirectAccess : undefined}
+              notice={demoError}
             />
         }
       />
@@ -132,11 +124,12 @@ const AppRoutes: React.FC = () => {
         path="/onboarding"
         element={
           <Onboarding
-            onComplete={(score, _role) => {
-              setOnboardingScore(score);
-              navigate(score >= 8 ? '/register' : '/denied');
+            onComplete={(evaluation, _role) => {
+              setVetting(evaluation);
+              // Admission rule lives server-side in the rubric; the client only
+              // routes on the returned admissionStatus.
+              navigate(evaluation.admissionStatus === 'REJECTED' ? '/denied' : '/register');
             }}
-            onAdminBypass={(u) => { setUser(u); navigate('/dashboard/feed'); }}
           />
         }
       />
@@ -144,8 +137,8 @@ const AppRoutes: React.FC = () => {
       <Route
         path="/register"
         element={
-          onboardingScore !== null
-            ? <Auth onboardingScore={onboardingScore} onRegister={(u) => { setUser(u); navigate('/dashboard/feed'); }} />
+          vetting !== null
+            ? <Auth vetting={vetting} onRegister={(u) => { setUser(u); navigate('/dashboard/feed'); }} />
             : <Navigate to="/onboarding" replace />
         }
       />
@@ -153,30 +146,35 @@ const AppRoutes: React.FC = () => {
       <Route
         path="/denied"
         element={
-          <div className="min-h-screen flex items-center justify-center bg-paper dark:bg-ink text-ink dark:text-paper p-6 relative overflow-hidden">
-            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none opacity-20">
-              <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(197,160,89,0.1),transparent_70%)]"></div>
+          <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-surface-0 text-slate-900 dark:text-slate-100 p-6 relative overflow-hidden noise-overlay">
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-[radial-gradient(ellipse,rgba(208,165,79,0.10),transparent_65%)]" />
+              <div className="absolute inset-0 bg-grid-fade opacity-60" />
             </div>
-            <div className="max-w-xl bg-white dark:bg-zinc-900/50 p-12 border border-zinc-100 dark:border-zinc-800 relative z-10 shadow-2xl">
-              <div className="absolute top-0 left-0 w-full h-1 bg-amber-500"></div>
-              <span className="text-[10px] uppercase tracking-[0.4em] text-amber-600 dark:text-amber-500 font-bold mb-2 block">Status: Waitlisted</span>
-              <h1 className="text-5xl font-serif italic mb-6 text-ink dark:text-paper tracking-tighter">Conditional Access</h1>
-              <p className="text-zinc-500 dark:text-zinc-400 mb-8 leading-relaxed font-light text-lg">
-                Your initial strategic evaluation yielded a score of <span className="text-ink dark:text-paper font-bold">{onboardingScore}/10</span>. 
-                While this doesn't meet the threshold for immediate institutional access, your profile shows promise. You have been placed on the priority waitlist.
+            <div className="max-w-xl w-full bg-white dark:bg-surface-1 p-10 md:p-14 border border-slate-200 dark:border-white/[0.07] rounded-[24px] card-elevated hairline-gold relative z-10">
+              <span className="label-caps text-gold-500 mb-4 block">Status · Evaluation Verdict</span>
+              <h1 className="font-display text-5xl md:text-6xl font-semibold tracking-tight text-slate-900 dark:text-slate-50 mb-5 leading-[1.05]">
+                Not yet.<br />
+                <em className="display-italic text-gold-gradient" style={{ fontStyle: 'italic' }}>But close.</em>
+              </h1>
+              <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[15px] mb-9">
+                Your strategic evaluation yielded{' '}
+                <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">{vetting?.score ?? 0}/100</span>.
+                Admission requires 45+ with a CONDITIONAL or ADMITTED verdict. Re-attempt the
+                interview — each attempt is graded fresh by the analyst.
               </p>
-              <div className="flex flex-col gap-4">
-                <button
-                  onClick={() => navigate('/register')}
-                  className="w-full bg-amber-600 text-white px-6 py-5 rounded-none font-bold transition-all hover:bg-amber-700 uppercase tracking-widest text-[10px]"
-                >
-                  Confirm Waitlist Placement
-                </button>
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => navigate('/onboarding')}
-                  className="w-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 px-6 py-4 rounded-none font-medium transition-all hover:text-ink dark:hover:text-paper uppercase tracking-widest text-[10px]"
+                  className="btn-shine flex-1 bg-blue-600 text-white px-6 py-4 rounded-full font-bold text-[14px] hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all"
                 >
-                  Re-Attempt Vetting Protocol
+                  Re-attempt the interview
+                </button>
+                <button
+                  onClick={() => navigate('/')}
+                  className="flex-1 border border-slate-300 dark:border-white/15 text-slate-600 dark:text-slate-300 px-6 py-4 rounded-full font-semibold text-[14px] hover:border-slate-400 dark:hover:border-white/30 hover:bg-white/70 dark:hover:bg-white/[0.04] transition-all"
+                >
+                  Back to home
                 </button>
               </div>
             </div>

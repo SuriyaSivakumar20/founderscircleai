@@ -6,6 +6,7 @@ import Feed from './Feed';
 import Chat from './Chat';
 import ProfileView from './ProfileView';
 import Matches from './Matches';
+import { LogoMark } from './Brand';
 import { apiService } from '../services/apiService';
 
 interface DashboardProps {
@@ -17,11 +18,30 @@ interface DashboardProps {
 
 type TabId = 'feed' | 'matches' | 'network' | 'profile';
 
+const timeAgoShort = (dateStr: string): string => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (mins > 0) return `${mins}m ago`;
+  return 'just now';
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggleTheme }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
   const [platformStats, setPlatformStats] = useState<{ totalUsers: number; totalPosts: number; acceptedConnections: number } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsError, setNotificationsError] = useState('');
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  // Bumped when a notification is clicked → Chat re-fetches requests/conversations
+  // (clicking a connection request while already on Messages must not show stale data).
+  const [chatRefreshKey, setChatRefreshKey] = useState(0);
 
   const pathSegment = location.pathname.split('/').pop() as TabId | undefined;
   const activeTab: TabId = (['feed', 'matches', 'network', 'profile'] as TabId[]).includes(pathSegment as TabId)
@@ -58,6 +78,61 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
       .catch(() => {});
   }, []);
 
+  // ── Notification panel ────────────────────────────────────────────────────
+  const refreshNotifications = async () => {
+    try {
+      const data = await apiService.getNotifications();
+      setNotifications(data.notifications || []);
+      setUnreadCount(data.unreadCount || 0);
+      setNotificationsError('');
+    } catch {
+      setNotificationsError('Could not load notifications.');
+    }
+  };
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    setIsLoadingNotifications(true);
+    refreshNotifications().finally(() => setIsLoadingNotifications(false));
+  }, [showNotifications]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleNotificationClick = async (n: any) => {
+    try {
+      if (!n.isRead) {
+        await apiService.markNotificationRead(n.id);
+        setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, isRead: true } : x));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch { /* click still navigates below */ }
+
+    setShowNotifications(false);
+    setChatRefreshKey(prev => prev + 1); // Chat re-reads requests + conversations
+    if (n.type === 'CONNECTION_REQUEST' && n.referenceId) {
+      navigate('/dashboard/network'); // pending requests are actionable in Chat
+    } else if (n.type === 'MESSAGE') {
+      navigate('/dashboard/network');
+    } else if (n.type === 'NEW_LIKE' || n.type === 'NEW_COMMENT') {
+      navigate('/dashboard/feed');
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await apiService.markAllNotificationsRead();
+      setNotifications(prev => prev.map(x => ({ ...x, isRead: true })));
+      setUnreadCount(0);
+    } catch {
+      setNotificationsError('Could not mark notifications as read.');
+    }
+  };
+
+  // ── Header search → Discover pre-filtered ─────────────────────────────────
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    navigate(q ? `/dashboard/matches?q=${encodeURIComponent(q)}` : '/dashboard/matches');
+  };
+
   const tabs: { id: TabId; label: string; path: string; icon: React.ReactNode }[] = [
     {
       id: 'feed', label: 'News Feed', path: '/dashboard/feed',
@@ -80,18 +155,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
   const pageTitle = tabs.find(t => t.id === activeTab)?.label || 'Dashboard';
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b1120] flex transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-surface-0 flex transition-colors duration-300">
 
       {/* Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-white dark:bg-[#0f172a] border-r border-slate-200 dark:border-slate-800 p-6 z-50">
+      <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-white dark:bg-surface-1 border-r border-slate-200 dark:border-slate-800 p-6 z-50 hairline-gold">
         {/* Logo */}
         <div className="mb-10 flex items-center gap-3">
-          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-500/30">
-            🐦
-          </div>
+          <LogoMark size={38} />
           <div>
-            <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white leading-tight block">B.I.R.D</span>
-            <span className="text-[10px] font-medium text-slate-500 leading-tight">Business Intelligence</span>
+            <span className="font-display text-lg font-semibold tracking-[0.02em] text-slate-900 dark:text-slate-50 leading-tight block">B.I.R.D</span>
+            <span className="label-caps text-[8px] text-slate-400 leading-tight block mt-1">Private Capital Network</span>
           </div>
         </div>
 
@@ -108,7 +181,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
             </div>
             <div className="text-center">
               <p className="text-base font-extrabold text-blue-600">{platformStats.acceptedConnections}</p>
-              <p className="text-[10px] text-slate-500 font-semibold">Deals</p>
+              <p className="text-[10px] text-slate-500 font-semibold">Connections</p>
             </div>
           </div>
         )}
@@ -161,30 +234,85 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
       <main className="flex-1 w-full md:ml-64 flex flex-col min-h-screen">
 
         {/* Top Header */}
-        <header className="sticky top-0 z-40 bg-white/80 dark:bg-[#0f172a]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">{pageTitle}</h2>
+        <header className="sticky top-0 z-40 bg-white/80 dark:bg-surface-1/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
+          <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-white tracking-tight">{pageTitle}</h2>
 
           <div className="hidden md:flex flex-1 max-w-xs mx-6">
-            <div className="relative w-full">
+            <form onSubmit={handleSearchSubmit} className="relative w-full">
               <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               <input
                 type="text"
-                placeholder="Search B.I.R.D..."
+                placeholder="Search sector, city, stage..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm rounded-xl pl-9 pr-4 py-2 font-medium focus:border-blue-500 focus:outline-none transition-colors dark:text-white"
               />
-            </div>
+            </form>
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Notification bell with real unread count */}
-            <button className="relative text-slate-500 hover:text-blue-600 dark:text-slate-400 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
+            {/* Notification bell — real unread count, real panel */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(prev => !prev)}
+                className="relative text-slate-500 hover:text-blue-600 dark:text-slate-400 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+                  <div className="absolute right-0 mt-2 w-96 max-w-[90vw] bg-white dark:bg-surface-1 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">Notifications</h3>
+                      {unreadCount > 0 && (
+                        <button onClick={handleMarkAllRead} className="text-xs font-semibold text-blue-600 hover:text-blue-700">
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {isLoadingNotifications ? (
+                        <div className="p-6 flex justify-center">
+                          <div className="w-6 h-6 border-3 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
+                        </div>
+                      ) : notificationsError ? (
+                        <div className="p-6 text-center">
+                          <p className="text-xs text-red-500 font-medium mb-3">{notificationsError}</p>
+                          <button onClick={refreshNotifications} className="text-xs font-semibold text-blue-600 hover:text-blue-700">Retry</button>
+                        </div>
+                      ) : notifications.length === 0 ? (
+                        <div className="p-8 text-center text-sm text-slate-500">
+                          Nothing yet. Connection requests, likes and messages will appear here.
+                        </div>
+                      ) : (
+                        notifications.map(n => (
+                          <button
+                            key={n.id}
+                            onClick={() => handleNotificationClick(n)}
+                            className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-start gap-3 ${n.isRead ? 'opacity-60' : ''}`}
+                          >
+                            {!n.isRead && <span className="w-2 h-2 rounded-full bg-blue-600 mt-1.5 shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-slate-800 dark:text-slate-200 font-medium leading-snug">{n.message}</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                {n.type.replace(/_/g, ' ').toLowerCase()} · {timeAgoShort(n.createdAt)}
+                              </p>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
-            </button>
+            </div>
 
             <div className="flex items-center gap-3">
               <img
@@ -205,7 +333,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
           <Routes>
             <Route path="feed"    element={<Feed user={user} />} />
             <Route path="matches" element={<Matches user={user} />} />
-            <Route path="network" element={<Chat user={user} />} />
+            <Route path="network" element={<Chat user={user} refreshKey={chatRefreshKey} />} />
             <Route path="profile" element={<ProfileView user={user} />} />
             <Route path="*"       element={<Navigate to="feed" replace />} />
           </Routes>
@@ -213,7 +341,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, isDarkMode, toggl
       </main>
 
       {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#0f172a]/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-around p-3 z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-surface-1/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex justify-around p-3 z-50">
         {tabs.map(tab => (
           <button
             key={tab.id}

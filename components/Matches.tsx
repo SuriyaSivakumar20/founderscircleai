@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { User } from '../types';
 import { apiService } from '../services/apiService';
 
@@ -26,6 +27,8 @@ interface ScoredMatch {
   entityType: 'company' | 'investor';
   matchScore: number;
   matchLabel: string;
+  /** Persisted server-side: has this user already expressed interest? */
+  interested?: boolean;
 }
 
 const scoreBadge = (score: number): string => {
@@ -68,10 +71,15 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
 };
 
 const Matches: React.FC<MatchesProps> = ({ user }) => {
+  const location = useLocation();
+  // The dashboard header search lands here as ?q=term — pre-fill the sector filter.
+  const initialQuery = new URLSearchParams(location.search).get('q') || '';
+
   const [matches, setMatches] = useState<ScoredMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [activeProfile, setActiveProfile] = useState<ScoredMatch | null>(null);
-  const [filters, setFilters] = useState({ sector: '', stage: '', location: '' });
+  const [filters, setFilters] = useState({ sector: initialQuery, stage: '', location: '' });
   const [interestStates, setInterestStates] = useState<Record<string, 'idle' | 'sending' | 'sent'>>({});
   const [viewerRole, setViewerRole] = useState<string>(user.role);
 
@@ -86,6 +94,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
 
   const loadMatches = useCallback(async () => {
     setIsLoading(true);
+    setLoadError('');
     try {
       const params: Record<string, string> = {};
       if (filters.sector)   params.sector   = filters.sector;
@@ -95,8 +104,8 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
       const data = await apiService.getMatches(params);
       setMatches(data.matches || []);
       setViewerRole(data.viewerRole || user.role);
-    } catch (err) {
-      console.error('Matches load error:', err);
+    } catch {
+      setLoadError('Could not load matches. Please retry.');
     } finally {
       setIsLoading(false);
     }
@@ -105,17 +114,20 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
   useEffect(() => { loadMatches(); }, [loadMatches]);
 
   const handleInterest = async (match: ScoredMatch) => {
-    if (interestStates[match.id] === 'sending' || interestStates[match.id] === 'sent') return;
+    if (isSent(match.id) || interestStates[match.id] === 'sending') return;
     setInterestStates(prev => ({ ...prev, [match.id]: 'sending' }));
     try {
       await apiService.expressInterest(match.id, match.entityType);
+      // Persisted server-side — survives reloads and devices.
       setInterestStates(prev => ({ ...prev, [match.id]: 'sent' }));
+      setMatches(prev => prev.map(m => m.id === match.id ? { ...m, interested: true } : m));
     } catch {
       setInterestStates(prev => ({ ...prev, [match.id]: 'idle' }));
     }
   };
 
-  const isSent    = (id: string) => interestStates[id] === 'sent';
+  // Server flag is authoritative; local state covers the current session.
+  const isSent    = (id: string) => interestStates[id] === 'sent' || matches.find(m => m.id === id)?.interested === true;
   const isSending = (id: string) => interestStates[id] === 'sending';
 
   const renderKeyMetric = (match: ScoredMatch) => {
@@ -136,7 +148,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
 
       {/* Header */}
-      <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+      <div className="bg-white dark:bg-surface-1 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -144,7 +156,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
                 {isFounder ? '🚀 Startup View' : '💼 Investor View'}
               </span>
             </div>
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">{pageTitle}</h1>
+            <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">{pageTitle}</h1>
             <p className="text-slate-500 text-sm mt-1">
               {pageSubtitle}
               {' '}<span className="font-semibold text-blue-600">{matches.length} matches found.</span>
@@ -198,8 +210,17 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
             {isFounder ? 'Scoring investors against your profile...' : 'Scoring startups against your thesis...'}
           </p>
         </div>
+      ) : loadError ? (
+        <div className="bg-white dark:bg-surface-1 rounded-2xl border border-slate-200 dark:border-slate-800 p-16 text-center shadow-sm">
+          <div className="text-4xl mb-4">⚠️</div>
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Could not load matches</h3>
+          <p className="text-slate-500 mb-5">{loadError}</p>
+          <button onClick={loadMatches} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm">
+            Retry
+          </button>
+        </div>
       ) : matches.length === 0 ? (
-        <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 p-20 text-center shadow-sm">
+        <div className="bg-white dark:bg-surface-1 rounded-2xl border border-slate-200 dark:border-slate-800 p-20 text-center shadow-sm">
           <div className="text-4xl mb-4">🔍</div>
           <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No matches found</h3>
           <p className="text-slate-500">Try clearing your filters or update your profile to improve match quality.</p>
@@ -207,7 +228,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {matches.map(match => (
-            <div key={match.id} className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md hover:border-blue-500/30 transition-all group flex flex-col">
+            <div key={match.id} className="bg-white dark:bg-surface-1 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md hover:border-blue-500/30 transition-all group flex flex-col">
               {/* Cover gradient */}
               <div className={`h-16 ${match.type === 'INVESTOR' ? 'bg-gradient-to-r from-violet-100 to-indigo-100 dark:from-violet-900/30 dark:to-indigo-900/30' : 'bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20'}`} />
 
@@ -215,7 +236,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
                 <div className="flex justify-between items-end mb-4">
                   <img
                     src={match.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${match.name}&backgroundColor=dbeafe&textColor=1e40af`}
-                    className="w-14 h-14 rounded-xl border-4 border-white dark:border-[#0f172a] object-cover bg-white shadow-sm"
+                    className="w-14 h-14 rounded-xl border-4 border-white dark:border-surface-1 object-cover bg-white shadow-sm"
                     alt={match.name}
                   />
                   <div className="flex items-center gap-2">
@@ -282,7 +303,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
       {activeProfile && (
         <>
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50" onClick={() => setActiveProfile(null)} />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl z-50 overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white dark:bg-surface-1 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-[90vh] flex flex-col">
             <div className={`h-24 relative shrink-0 ${activeProfile.type === 'INVESTOR' ? 'bg-gradient-to-r from-violet-600 to-indigo-600' : 'bg-gradient-to-r from-blue-600 to-cyan-600'}`}>
               <button onClick={() => setActiveProfile(null)} className="absolute top-4 right-4 text-white/80 hover:text-white bg-black/20 hover:bg-black/40 p-2 rounded-full transition-colors">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -298,7 +319,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
               <div className="flex justify-between items-end -mt-10 mb-5">
                 <img
                   src={activeProfile.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${activeProfile.name}&backgroundColor=dbeafe&textColor=1e40af`}
-                  className="w-20 h-20 rounded-2xl border-4 border-white dark:border-[#0f172a] shadow-md object-cover bg-white"
+                  className="w-20 h-20 rounded-2xl border-4 border-white dark:border-surface-1 shadow-md object-cover bg-white"
                   alt={activeProfile.name}
                 />
                 <div className="flex items-center gap-3">
@@ -310,7 +331,7 @@ const Matches: React.FC<MatchesProps> = ({ user }) => {
                 </div>
               </div>
 
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{activeProfile.name}</h2>
+              <h2 className="font-display text-2xl font-semibold text-slate-900 dark:text-white mb-1">{activeProfile.name}</h2>
               <p className="text-slate-500 text-sm mb-4">
                 📍 {activeProfile.location}
                 {activeProfile.type === 'COMPANY' && activeProfile.industry && ` · ${activeProfile.industry}`}
